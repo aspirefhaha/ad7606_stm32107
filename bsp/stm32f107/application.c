@@ -35,6 +35,7 @@
 #include <netif/ethernetif.h>
 #include "stm32_eth.h"
 #endif
+#include "finsh.h"
 
 void rt_init_thread_entry(void* parameter)
 {
@@ -101,4 +102,13 @@ int rt_application_init()
     return 0;
 }
 
+long reset(void)
+{
+	NVIC_SystemReset();                                                  /* wait until reset */
+	return 0;
+}
+
+#ifdef RT_USING_FINSH
+FINSH_FUNCTION_EXPORT(reset,reboot system);
+#endif
 /*@}*/

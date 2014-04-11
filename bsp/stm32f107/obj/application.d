@@ -51,3 +51,6 @@
 .\obj\application.o: Libraries\STM32F10x_StdPeriph_Driver\inc\stm32f10x_usart.h
 .\obj\application.o: Libraries\STM32F10x_StdPeriph_Driver\inc\stm32f10x_wwdg.h
 .\obj\application.o: Libraries\STM32F10x_StdPeriph_Driver\inc\misc.h
+.\obj\application.o: ..\..\components\finsh\finsh.h
+.\obj\application.o: C:\Keil\ARM\RV31\Inc\ctype.h
+.\obj\application.o: C:\Keil\ARM\RV31\Inc\stdlib.h

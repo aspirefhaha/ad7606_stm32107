@@ -19,6 +19,8 @@
 
 #include <rtthread.h>
 #include <rthw.h>
+//#include <system_stm32f10x.h>
+extern unsigned int  SystemCoreClock;
 
 /**
  * @addtogroup KernelService
@@ -467,6 +469,8 @@ void rt_show_version(void)
 	rt_kprintf("- RT -     Thread Operating System\n");
 	rt_kprintf(" / | \\     %d.%d.%d upgrade %d build %s %s\n", RT_VERSION, RT_SUBVERSION, RT_REVISION,UPGRADE_VERSION, __DATE__,__TIME__);
 	rt_kprintf(" 2006 - 2011 Copyright by rt-thread team\n");
+	rt_kprintf("Build Time %s %s\n",__DATE__,__TIME__);
+	rt_kprintf("System Clock Frequence %dMHz\n",SystemCoreClock/1000000);
 }
 
 /* private function */
