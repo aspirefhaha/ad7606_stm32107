@@ -1,0 +1,11 @@
+.\obj\finsh_heap.o: ..\..\components\finsh\finsh_heap.c
+.\obj\finsh_heap.o: ..\..\components\finsh\finsh.h
+.\obj\finsh_heap.o: ..\..\include\rtthread.h
+.\obj\finsh_heap.o: ..\..\include\rtdef.h
+.\obj\finsh_heap.o: .\rtconfig.h
+.\obj\finsh_heap.o: C:\Keil\ARM\RV31\Inc\stdarg.h
+.\obj\finsh_heap.o: ..\..\include\rtdebug.h
+.\obj\finsh_heap.o: C:\Keil\ARM\RV31\Inc\ctype.h
+.\obj\finsh_heap.o: C:\Keil\ARM\RV31\Inc\stdlib.h
+.\obj\finsh_heap.o: C:\Keil\ARM\RV31\Inc\string.h
+.\obj\finsh_heap.o: ..\..\components\finsh\finsh_var.h

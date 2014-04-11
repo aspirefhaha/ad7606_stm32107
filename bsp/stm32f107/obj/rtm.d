@@ -1,0 +1,10 @@
+.\obj\rtm.o: ..\..\src\rtm.c
+.\obj\rtm.o: ..\..\include\rtthread.h
+.\obj\rtm.o: ..\..\include\rtdef.h
+.\obj\rtm.o: .\rtconfig.h
+.\obj\rtm.o: C:\Keil\ARM\RV31\Inc\stdarg.h
+.\obj\rtm.o: ..\..\include\rtdebug.h
+.\obj\rtm.o: C:\Keil\ARM\RV31\Inc\assert.h
+.\obj\rtm.o: C:\Keil\ARM\RV31\Inc\stdlib.h
+.\obj\rtm.o: C:\Keil\ARM\RV31\Inc\string.h
+.\obj\rtm.o: C:\Keil\ARM\RV31\Inc\stdio.h

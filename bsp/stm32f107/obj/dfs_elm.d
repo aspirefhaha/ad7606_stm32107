@@ -1,0 +1,13 @@
+.\obj\dfs_elm.o: ..\..\components\dfs\filesystems\elmfat\dfs_elm.c
+.\obj\dfs_elm.o: ..\..\include\rtthread.h
+.\obj\dfs_elm.o: ..\..\include\rtdef.h
+.\obj\dfs_elm.o: .\rtconfig.h
+.\obj\dfs_elm.o: C:\Keil\ARM\RV31\Inc\stdarg.h
+.\obj\dfs_elm.o: ..\..\include\rtdebug.h
+.\obj\dfs_elm.o: ..\..\components\dfs\filesystems\elmfat\ffconf.h
+.\obj\dfs_elm.o: ..\..\components\dfs\filesystems\elmfat\ff.h
+.\obj\dfs_elm.o: ..\..\components\dfs\filesystems\elmfat\integer.h
+.\obj\dfs_elm.o: ..\..\components\dfs\include\dfs_fs.h
+.\obj\dfs_elm.o: ..\..\components\dfs\include\dfs_def.h
+.\obj\dfs_elm.o: C:\Keil\ARM\RV31\Inc\stdio.h
+.\obj\dfs_elm.o: ..\..\components\dfs\filesystems\elmfat\diskio.h

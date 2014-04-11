@@ -1,0 +1,10 @@
+.\obj\cmd.o: ..\..\components\finsh\cmd.c
+.\obj\cmd.o: ..\..\include\rtthread.h
+.\obj\cmd.o: ..\..\include\rtdef.h
+.\obj\cmd.o: .\rtconfig.h
+.\obj\cmd.o: C:\Keil\ARM\RV31\Inc\stdarg.h
+.\obj\cmd.o: ..\..\include\rtdebug.h
+.\obj\cmd.o: ..\..\components\finsh\finsh.h
+.\obj\cmd.o: C:\Keil\ARM\RV31\Inc\ctype.h
+.\obj\cmd.o: C:\Keil\ARM\RV31\Inc\stdlib.h
+.\obj\cmd.o: C:\Keil\ARM\RV31\Inc\string.h

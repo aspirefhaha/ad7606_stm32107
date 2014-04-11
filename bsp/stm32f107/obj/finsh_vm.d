@@ -1,0 +1,13 @@
+.\obj\finsh_vm.o: ..\..\components\finsh\finsh_vm.c
+.\obj\finsh_vm.o: ..\..\components\finsh\finsh.h
+.\obj\finsh_vm.o: ..\..\include\rtthread.h
+.\obj\finsh_vm.o: ..\..\include\rtdef.h
+.\obj\finsh_vm.o: .\rtconfig.h
+.\obj\finsh_vm.o: C:\Keil\ARM\RV31\Inc\stdarg.h
+.\obj\finsh_vm.o: ..\..\include\rtdebug.h
+.\obj\finsh_vm.o: C:\Keil\ARM\RV31\Inc\ctype.h
+.\obj\finsh_vm.o: C:\Keil\ARM\RV31\Inc\stdlib.h
+.\obj\finsh_vm.o: C:\Keil\ARM\RV31\Inc\string.h
+.\obj\finsh_vm.o: ..\..\components\finsh\finsh_vm.h
+.\obj\finsh_vm.o: ..\..\components\finsh\finsh_var.h
+.\obj\finsh_vm.o: ..\..\components\finsh\finsh_ops.h

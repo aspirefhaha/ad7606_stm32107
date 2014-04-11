@@ -1,0 +1,10 @@
+.\obj\module.o: ..\..\src\module.c
+.\obj\module.o: ..\..\include\rthw.h
+.\obj\module.o: ..\..\include\rtthread.h
+.\obj\module.o: ..\..\include\rtdef.h
+.\obj\module.o: .\rtconfig.h
+.\obj\module.o: C:\Keil\ARM\RV31\Inc\stdarg.h
+.\obj\module.o: ..\..\include\rtdebug.h
+.\obj\module.o: ..\..\include\rtm.h
+.\obj\module.o: C:\Keil\ARM\RV31\Inc\string.h
+.\obj\module.o: ..\..\src\kservice.h
