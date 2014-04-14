@@ -6,8 +6,9 @@
 
 #include "finsh.h"
 #define MEAN_TIME	12
+#define M3ADC_CHANNELS	4
 // 注：ADC为12位模数转换器，只有ADCConvertedValue的低12位有效
-static __IO uint16_t advalues[4*MEAN_TIME];
+static __IO uint16_t advalues[M3ADC_CHANNELS*MEAN_TIME];
 
 void m3ad_init(void)
 {
@@ -25,7 +26,7 @@ void m3ad_init(void)
 	DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&ADC1->DR;    //DMA对应的外设基地址
 	DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)&advalues;   //内存存储基地址
 	DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;	//DMA的转换模式为SRC模式，由外设搬移到内存
-	DMA_InitStructure.DMA_BufferSize = 4*MEAN_TIME;		   //DMA缓存大小，1个,单位为DMA_MemoryDataSize
+	DMA_InitStructure.DMA_BufferSize = M3ADC_CHANNELS*MEAN_TIME;		   //DMA缓存大小，1个,单位为DMA_MemoryDataSize
 	DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;	//接收一次数据后，设备地址禁止后移
 	DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;	//关闭接收一次数据后，目标内存地址后移
 	DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;  //定义外设数据宽度为16位
@@ -53,7 +54,7 @@ void m3ad_init(void)
 	ADC_InitStructure.ADC_ContinuousConvMode = ENABLE;   //开启连续转换模式
 	ADC_InitStructure.ADC_ExternalTrigConv = ADC_ExternalTrigConv_None;	//ADC外部开关，关闭状态
 	ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;   //对齐方式,ADC为12位中，右对齐方式
-	ADC_InitStructure.ADC_NbrOfChannel = 4;	 //开启通道数，1个
+	ADC_InitStructure.ADC_NbrOfChannel = M3ADC_CHANNELS;	 //开启通道数，1个
 	ADC_Init(ADC1, &ADC_InitStructure);
 
 	/* ADC1 regular channel10 configuration ADC通道组， 第10个通道 采样顺序1，转换时间 */ 	 	

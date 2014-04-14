@@ -971,6 +971,11 @@
               <FileType>1</FileType>
               <FilePath>.\driver\ad7606.c</FilePath>
             </File>
+            <File>
+              <FileName>m3ad.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\driver\m3ad.c</FilePath>
+            </File>
           </Files>
         </Group>
       </Groups>

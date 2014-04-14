@@ -21,6 +21,7 @@
 
 #ifdef RT_USING_AD7606
 #include "driver/ad7606.h"
+#include "driver/m3ad.h"
 #endif
 
 /**
@@ -94,6 +95,7 @@ void rtthread_startup(void)
 
 #ifdef RT_USING_AD7606
 	ad7606_init();
+	m3ad_init();
 #endif
 
 	/* init scheduler system */

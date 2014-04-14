@@ -330,6 +330,7 @@ void rt_hw_usart_init()
 	/* register uart3 */
 	rt_hw_serial_register(&uart3_device, "uart3",
 		RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_INT_RX | RT_DEVICE_FLAG_DMA_TX,
+		//RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_INT_RX |RT_DEVICE_FLAG_INT_TX,
 		&uart3);
 
 	/* Enable USART3 DMA Tx request */
