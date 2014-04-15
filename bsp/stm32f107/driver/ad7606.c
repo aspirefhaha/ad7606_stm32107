@@ -138,23 +138,31 @@ void SPI3_DMA_Configuration(void)
 }
 
 
-void DMA_SPI_Start(__IO unsigned short * addr )
+rt_inline void DMA_SPI_Start(__IO unsigned short * addr )
 {	
-	DMA_Cmd(DMA2_Channel2, DISABLE);                                                  //停止 DMA 通道 DMA1_Channel3 
-	DMA_Cmd(DMA2_Channel1, DISABLE);
+	//DMA_Cmd(DMA2_Channel2, DISABLE);                                                  //停止 DMA 通道 DMA1_Channel3
+	DMA2_Channel2->CCR 	&= (uint16_t)(~DMA_CCR1_EN);
+	//DMA_Cmd(DMA2_Channel1, DISABLE);
+	DMA2_Channel1->CCR 	&= (uint16_t)(~DMA_CCR1_EN);
  
     /* DMA2 Channel1 (triggered by SPI3 Rx event) Config */
-	DMA_SetCurrDataCounter(DMA2_Channel1,0);
-	DMA_SetCurrDataCounter(DMA2_Channel1,AD_CHS);
+	//DMA_SetCurrDataCounter(DMA2_Channel1,0);
+	//DMA2_Channel1->CNDTR = 0;
+	//DMA_SetCurrDataCounter(DMA2_Channel1,AD_CHS);
+	DMA2_Channel1->CNDTR = AD_CHS;
     DMA2_Channel1->CMAR = (uint32_t)ad_dma_buf;
 	
 	/* DMA2 Channel2 (triggered by SPI3 Tx event) Config */
-	DMA_SetCurrDataCounter(DMA2_Channel2,0);
-	DMA_SetCurrDataCounter(DMA2_Channel2,AD_CHS);
+	//DMA_SetCurrDataCounter(DMA2_Channel2,0);
+	//DMA2_Channel2->CNDTR = 0;
+	//DMA_SetCurrDataCounter(DMA2_Channel2,AD_CHS);
+	DMA2_Channel2->CNDTR = AD_CHS;
 	
 
-	DMA_Cmd(DMA2_Channel2, ENABLE);                                                  //开启 DMA 通道 DMA1_Channel3 
-	DMA_Cmd(DMA2_Channel1, ENABLE);
+	//DMA_Cmd(DMA2_Channel2, ENABLE);  												   //开启 DMA 通道 DMA1_Channel3 
+	DMA2_Channel2->CCR |= DMA_CCR1_EN;                                                 
+	//DMA_Cmd(DMA2_Channel1, ENABLE);
+	DMA2_Channel1->CCR |= DMA_CCR1_EN;
 }
 #endif
 void ad7606_init(void)
@@ -303,9 +311,14 @@ long ad_start(void)
 #ifdef DMA_SPI3
 void EXTI1_IRQHandler(void) /* AD Data ok */
 {
-  if(EXTI_GetITStatus(ADBUSY_EXTI_LINE) != RESET)
+  //if(EXTI_GetITStatus(ADBUSY_EXTI_LINE) != RESET)
+  //uint32_t enablestatus = 0;
+  //enablestatus =  EXTI->IMR & ADBUSY_EXTI_LINE;
+  //if (((EXTI->PR & ADBUSY_EXTI_LINE) != (uint32_t)RESET) && (enablestatus != (uint32_t)RESET))
+  if ((AD_BUSY_PORT->IDR & AD_BUSY_PIN) == (uint32_t)Bit_RESET)
   {
-  	GPIO_WriteBit(AD_CS_PORT, AD_CS_PIN, Bit_RESET);
+  	//GPIO_WriteBit(AD_CS_PORT, AD_CS_PIN, Bit_RESET);
+	AD_CS_PORT->BRR = AD_CS_PIN;
   	DMA_SPI_Start(ad_dma_buf);
     /* Clear the EXTI Line 4 */
     EXTI_ClearITPendingBit(ADBUSY_EXTI_LINE);
