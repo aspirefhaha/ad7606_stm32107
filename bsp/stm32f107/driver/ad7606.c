@@ -91,14 +91,14 @@ void ad_read(unsigned short * buf,int len)                                      
 * Return         : None
 * Attention             : 
 *******************************************************************************/
-void DMA_SPI_Start(__IO unsigned short * addr )
+void SPI3_DMA_Configuration(void)
 {
-    DMA_InitTypeDef DMA_InitStructure;
+	DMA_InitTypeDef DMA_InitStructure;
     
     /* DMA2 Channel1 (triggered by SPI3 Rx event) Config */
 	DMA_DeInit(DMA2_Channel1);  
 	DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&SPI3->DR;                  //设置 SPI1 发送外设(0x4001300C) 地址(目的地址)
-	DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)ad_dma_buf;                    //设置 SRAM 存储地址(目的地址)
+	//DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)ad_dma_buf;                    //设置 SRAM 存储地址(目的地址)
 	DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;                                //传输方向 外设-内存
 	DMA_InitStructure.DMA_BufferSize = AD_CHS;                         //设置 SPI1 发送长度
 	DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
@@ -135,6 +135,24 @@ void DMA_SPI_Start(__IO unsigned short * addr )
 	DMA_ITConfig(DMA2_Channel2, DMA_IT_TE, ENABLE);                                   //开启 DMA2_Channel2 传输错误中断
 	DMA_ITConfig(DMA2_Channel2, DMA_IT_HT, DISABLE);                                   //开启 DMA2_Channel2 半数传输中断
 
+}
+
+
+void DMA_SPI_Start(__IO unsigned short * addr )
+{	
+	DMA_Cmd(DMA2_Channel2, DISABLE);                                                  //停止 DMA 通道 DMA1_Channel3 
+	DMA_Cmd(DMA2_Channel1, DISABLE);
+ 
+    /* DMA2 Channel1 (triggered by SPI3 Rx event) Config */
+	DMA_SetCurrDataCounter(DMA2_Channel1,0);
+	DMA_SetCurrDataCounter(DMA2_Channel1,AD_CHS);
+    DMA2_Channel1->CMAR = (uint32_t)ad_dma_buf;
+	
+	/* DMA2 Channel2 (triggered by SPI3 Tx event) Config */
+	DMA_SetCurrDataCounter(DMA2_Channel2,0);
+	DMA_SetCurrDataCounter(DMA2_Channel2,AD_CHS);
+	
+
 	DMA_Cmd(DMA2_Channel2, ENABLE);                                                  //开启 DMA 通道 DMA1_Channel3 
 	DMA_Cmd(DMA2_Channel1, ENABLE);
 }
@@ -152,7 +170,7 @@ void ad7606_init(void)
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD | RCC_APB2Periph_AFIO, ENABLE);    //使能GPIO的时钟
 #ifdef DMA_SPI3
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA2, ENABLE);
-
+	SPI3_DMA_Configuration();
 #endif
 	GPIO_PinRemapConfig(GPIO_Remap_SPI3, ENABLE);
 
@@ -174,7 +192,7 @@ void ad7606_init(void)
 
 	GPIO_InitStructure.GPIO_Pin = AD_CS_PIN;          //使能
 	GPIO_Init(AD_CS_PORT, &GPIO_InitStructure);
-
+										
 	GPIO_InitStructure.GPIO_Pin = AD_SCK_PIN;          //SPI 时钟
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
 	GPIO_Init(AD_SCK_PORT, &GPIO_InitStructure);
