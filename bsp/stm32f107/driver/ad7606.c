@@ -4,6 +4,7 @@
 #include <stm32f10x_dma.h>
 #include <finsh.h>
 #include <stdio.h>
+#include "../uploadapp.h"
 
 #define AD7606_SPI	SPI3
 #define AD_SPI_RCC	RCC_APB1Periph_SPI3
@@ -12,11 +13,12 @@
 #define AD_USE_PWM
 
 #ifdef DMA_SPI3
-#define AD_TIMES	1	//缓冲区能存多少次数据
-#define AD_CHS		4	//通道数
 
-static __IO unsigned short ad_dma_buf[AD_TIMES*AD_CHS]={0};
-static __IO unsigned short ad_dma_sd=0;
+static volatile unsigned short ad_dma_sd=0;
+#pragma pack(push)
+#pragma pack(16)
+volatile unsigned short ad_dma_buf[POOLSIZE][AD_TIMES*AD_CHS]={0};
+#pragma pack(pop)
 #endif
 
 #define AD_OS0_PORT		GPIOD
@@ -104,8 +106,8 @@ long ad_pwm(void)
 	//TIM_InternalClockConfig(TIM3);
 
 	// Time base configuration 
-	TIM_TimeBaseStructure.TIM_Period = (200-1); //1000us 设置在下一个更新事件装入活动的自动重装载寄存器周期的值 80K
-	TIM_TimeBaseStructure.TIM_Prescaler = (18-1); //设置用来作为TIMx时钟频率除数的预分频值
+	TIM_TimeBaseStructure.TIM_Period = (400-1); //1000us 设置在下一个更新事件装入活动的自动重装载寄存器周期的值 80K
+	TIM_TimeBaseStructure.TIM_Prescaler = (9-1); //设置用来作为TIMx时钟频率除数的预分频值
 	TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1; //设置时钟分割:TDTS = Tck_tim
 	TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up; //TIM向上计数模式
 	TIM_TimeBaseInit(TIM3, &TIM_TimeBaseStructure); //根据TIM_TimeBaseInitStruct中指定的参数初始化TIMx的时间基数单位
@@ -192,7 +194,7 @@ rt_inline void DMA_SPI_Start(__IO unsigned short * addr )
 	//DMA2_Channel1->CNDTR = 0;
 	//DMA_SetCurrDataCounter(DMA2_Channel1,AD_CHS);
 	DMA2_Channel1->CNDTR = AD_CHS;
-    DMA2_Channel1->CMAR = (uint32_t)ad_dma_buf;
+    DMA2_Channel1->CMAR = (uint32_t)addr;
 	
 	/* DMA2 Channel2 (triggered by SPI3 Tx event) Config */
 	//DMA_SetCurrDataCounter(DMA2_Channel2,0);
@@ -324,23 +326,21 @@ void ad7606_init(void)
 
 #ifdef DMA_SPI3
 	NVIC_InitStructure.NVIC_IRQChannel = DMA2_Channel1_IRQn;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 10;
 	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
 	NVIC_Init(&NVIC_InitStructure);
 
 	NVIC_InitStructure.NVIC_IRQChannel = DMA2_Channel2_IRQn;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 10;
 	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
 	NVIC_Init(&NVIC_InitStructure);
 #endif
 
 	NVIC_InitStructure.NVIC_IRQChannel = ADBUSY_EXTI_IRQn;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
 	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
 	NVIC_Init(&NVIC_InitStructure);
-#ifdef AD_USE_PWM
-	ad_pwm();
-#endif
+
 }
 
 void ad_reset(void)
@@ -372,8 +372,11 @@ long ad_start(void)
 }
 
 #ifdef DMA_SPI3
+
 void EXTI1_IRQHandler(void) /* AD Data ok */
 {
+  static rt_uint32_t datacount = 0;
+  static rt_uint32_t bufindex = 0;
   //if(EXTI_GetITStatus(ADBUSY_EXTI_LINE) != RESET)
   //uint32_t enablestatus = 0;
   //enablestatus =  EXTI->IMR & ADBUSY_EXTI_LINE;
@@ -381,8 +384,18 @@ void EXTI1_IRQHandler(void) /* AD Data ok */
   if ((AD_BUSY_PORT->IDR & AD_BUSY_PIN) == (uint32_t)Bit_RESET)
   {
   	//GPIO_WriteBit(AD_CS_PORT, AD_CS_PIN, Bit_RESET);
+		
 	AD_CS_PORT->BRR = AD_CS_PIN;
-  	DMA_SPI_Start(ad_dma_buf);
+	
+  	DMA_SPI_Start(((short *)ad_dma_buf[bufindex])+datacount*AD_CHS);
+	if(++datacount >= AD_TIMES){
+		rt_mb_send(&fullmb,bufindex);
+	 	//rt_mb_recv(&emptymb,&bufindex,RT_WAITING_FOREVER);
+		bufindex++;
+		if(bufindex >= POOLSIZE)
+			bufindex = 0;
+		datacount = 0;
+	}
     /* Clear the EXTI Line 1 */
     EXTI_ClearITPendingBit(ADBUSY_EXTI_LINE);
   }
@@ -409,7 +422,7 @@ long ad_pt(void)
 	int i = 0 ;
 	rt_kprintf("ad data:\n");
 	for(i=0;i<AD_CHS;i++){
-		printf("channel %d : %04x  %d %fV\n",i,ad_dma_buf[i],(short)ad_dma_buf[i],(((short)ad_dma_buf[i])*10.0/32768.0));
+		//printf("channel %d : %04x  %d %fV\n",i,ad_dma_buf[i],(short)ad_dma_buf[i],(((short)ad_dma_buf[i])*10.0/32768.0));
 	}
 	return 0;	
 }

@@ -21,6 +21,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "stm32_eth.h"
 #include "stm32f10x_rcc.h"
+#include <rtthread.h>
 
 /* STM32F107 ETH dirver options */
 #define CHECKSUM_BY_HARDWARE
@@ -1696,7 +1697,27 @@ uint32_t ETH_GetDMARxDescBufferSize(ETH_DMADESCTypeDef *DMARxDesc, uint32_t DMAR
     return (DMARxDesc->ControlBufferSize & ETH_DMARxDesc_RBS1);
   }
 }
-
+#define NET_RESETRCC	 RCC_APB2Periph_GPIOB
+#define NET_RESETPORT		GPIOB
+#define NET_RESETPIN	GPIO_Pin_1
+void net_reset(void)
+{
+	GPIO_InitTypeDef  GPIO_InitStructure;
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
+	
+	/* Configure PD0*/
+	RCC_APB2PeriphClockCmd(NET_RESETRCC, ENABLE);
+	
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;	
+	GPIO_InitStructure.GPIO_Pin = NET_RESETPIN;
+	GPIO_Init(NET_RESETPORT, &GPIO_InitStructure);
+	
+	GPIO_ResetBits(NET_RESETPORT, NET_RESETPIN);
+	rt_thread_delay(50);
+	GPIO_SetBits(NET_RESETPORT, NET_RESETPIN);
+	rt_thread_delay(50);
+}
 /*---------------------------------  DMA  ------------------------------------*/
 /**
   * @brief  Resets all MAC subsystem internal registers and logic.
@@ -1708,6 +1729,7 @@ void ETH_SoftwareReset(void)
   /* Set the SWR bit: resets all MAC subsystem internal registers and logic */
   /* After reset all the registers holds their respective reset values */
   ETH->DMABMR |= ETH_DMABMR_SR;
+  net_reset();
 }
 
 /**
@@ -3177,7 +3199,7 @@ rt_err_t rt_stm32_eth_tx( rt_device_t dev, struct pbuf* p)
     /* get free tx buffer */
 	{
         rt_err_t result;
-        result = rt_sem_take(&tx_buf_free, 2);
+        result = rt_sem_take(&tx_buf_free, RT_WAITING_FOREVER);
         if (result != RT_EOK) return -RT_ERROR;
     }
 

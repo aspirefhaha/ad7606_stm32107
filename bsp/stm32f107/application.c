@@ -34,6 +34,7 @@
 #include <lwip/api.h>
 #include <netif/ethernetif.h>
 #include "stm32_eth.h"
+#include "uploadapp.h"
 #endif
 #include "finsh.h"
 
@@ -79,6 +80,9 @@ void rt_init_thread_entry(void* parameter)
         lwip_sys_init();
         rt_kprintf("TCP/IP initialized!\n");
     }
+#endif
+#ifdef RT_USING_LWIP	
+	netapp_start();
 #endif
 }
 

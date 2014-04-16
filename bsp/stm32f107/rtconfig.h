@@ -105,6 +105,10 @@
 /* Enable DNS */
 #define RT_LWIP_DNS
 
+//#define RT_LWIP_DHCP
+#define LWIP_NETIF_LINK_CALLBACK	1
+#define LWIP_NETIF_STATUS_CALLBACK	1
+
 /* the number of simulatenously active TCP connections*/
 #define RT_LWIP_TCP_PCB_NUM	5
 
@@ -112,7 +116,7 @@
 #define RT_LWIP_IPADDR0	192
 #define RT_LWIP_IPADDR1	168
 #define RT_LWIP_IPADDR2	1
-#define RT_LWIP_IPADDR3	30
+#define RT_LWIP_IPADDR3	222
 
 /* gateway address of target*/
 #define RT_LWIP_GWADDR0	192

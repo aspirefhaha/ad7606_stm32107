@@ -139,10 +139,6 @@ FINSH_FUNCTION_EXPORT(m3ad_th,m3ad thread);
 #ifdef FINSH_USING_SYMTAB
 //FINSH_VAR_EXPORT(advalue, finsh_type_uint, value of m3ad for finsh)
 #endif
+
 #endif
 
-
-
-
-
- 

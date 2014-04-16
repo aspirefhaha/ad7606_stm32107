@@ -18,6 +18,7 @@
 
 #include "stm32f10x.h"
 #include "board.h"
+#include "rtc.h"
 
 #ifdef RT_USING_AD7606
 #include "driver/ad7606.h"
@@ -100,7 +101,7 @@ void rtthread_startup(void)
 
 	/* init scheduler system */
 	rt_system_scheduler_init();
-
+	rt_hw_rtc_init();
 	/* init all device */
 	rt_device_init_all();
 

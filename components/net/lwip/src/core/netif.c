@@ -243,12 +243,12 @@ netif_find(char *name)
     return NULL;
   }
 
-  num = name[2] - '0';
+  num = name[1] - '0';
 
   for(netif = netif_list; netif != NULL; netif = netif->next) {
     if (num == netif->num &&
        name[0] == netif->name[0] &&
-       name[1] == netif->name[1]) {
+       name[1] == netif->name[1]  ) {
       LWIP_DEBUGF(NETIF_DEBUG, ("netif_find: found %c%c\n", name[0], name[1]));
       return netif;
     }
