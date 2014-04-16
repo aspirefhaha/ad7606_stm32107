@@ -9,6 +9,7 @@
 #define AD_SPI_RCC	RCC_APB1Periph_SPI3
 
 #define DMA_SPI3
+#define AD_USE_PWM
 
 #ifdef DMA_SPI3
 #define AD_TIMES	1	//缓冲区能存多少次数据
@@ -82,6 +83,47 @@ void ad_read(unsigned short * buf,int len)                                      
 	GPIO_WriteBit(AD_CS_PORT, AD_CS_PIN, Bit_SET);	
 	return ;
 }
+#ifdef AD_USE_PWM
+long ad_pwm(void)
+{
+	GPIO_InitTypeDef GPIO_InitStructure;
+	TIM_TimeBaseInitTypeDef   TIM_TimeBaseStructure;
+	TIM_OCInitTypeDef  TIM_OCInitStructure;
+	/* GPIOC clock enable */
+	//GPIOB使用的RCC时钟使能
+	//RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC|RCC_APB2Periph_AFIO, ENABLE);
+	GPIO_PinRemapConfig(GPIO_FullRemap_TIM3, ENABLE);
+
+	//配置使用的GPIO
+	GPIO_InitStructure.GPIO_Pin = AD_CVA_PIN;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(AD_CVA_PORT, &GPIO_InitStructure);
+	
+	//采用内部时钟给TIM3提供时钟源
+	//TIM_InternalClockConfig(TIM3);
+
+	// Time base configuration 
+	TIM_TimeBaseStructure.TIM_Period = (200-1); //1000us 设置在下一个更新事件装入活动的自动重装载寄存器周期的值 80K
+	TIM_TimeBaseStructure.TIM_Prescaler = (18-1); //设置用来作为TIMx时钟频率除数的预分频值
+	TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1; //设置时钟分割:TDTS = Tck_tim
+	TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up; //TIM向上计数模式
+	TIM_TimeBaseInit(TIM3, &TIM_TimeBaseStructure); //根据TIM_TimeBaseInitStruct中指定的参数初始化TIMx的时间基数单位
+	
+	// Output Compare Active Mode configuration: Channel1 
+	TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_PWM1; //选择定时器模式:TIM脉冲宽度调制模式1
+	TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable; //比较输出使能
+	TIM_OCInitStructure.TIM_Pulse = 1; //设置待装入捕获比较寄存器的脉冲值，设置占空比
+	TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_Low; //输出极性:TIM输出比较极性高
+	TIM_OC1Init(TIM3, &TIM_OCInitStructure); //根据TIM_OCInitStruct中指定的参数初始化外设TIMx
+
+	//TIM_OC1PreloadConfig(TIM3, TIM_OCPreload_Enable); //使能TIMx在CCR3上的预装载寄存器
+	
+	TIM_ARRPreloadConfig(TIM3, ENABLE); //使能TIMx在ARR上的预装载寄存器
+	TIM_Cmd(TIM3,ENABLE);	  
+	return 0;
+}
+#endif
 #ifdef DMA_SPI3
 /*******************************************************************************
 * Function Name  : SPI3_DMA_Configuration
@@ -176,6 +218,10 @@ void ad7606_init(void)
 
 	RCC_APB1PeriphClockCmd(AD_SPI_RCC, ENABLE);		//使能SPI3时钟
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD | RCC_APB2Periph_AFIO, ENABLE);    //使能GPIO的时钟
+#ifdef 	 AD_USE_PWM
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE);
+	GPIO_PinRemapConfig(GPIO_FullRemap_TIM3, ENABLE);
+#endif
 #ifdef DMA_SPI3
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA2, ENABLE);
 	SPI3_DMA_Configuration();
@@ -191,9 +237,10 @@ void ad7606_init(void)
 	GPIO_InitStructure.GPIO_Pin = AD_OS1_PIN;          //过采样 OS1
 	GPIO_Init(AD_OS1_PORT, &GPIO_InitStructure);
 
+#ifndef   AD_USE_PWM
 	GPIO_InitStructure.GPIO_Pin = AD_CVA_PIN;          //启动采样
 	GPIO_Init(AD_CVA_PORT, &GPIO_InitStructure);
-
+#endif
 	
 	GPIO_InitStructure.GPIO_Pin = AD_RST_PIN;          //AD重置
 	GPIO_Init(AD_RST_PORT, &GPIO_InitStructure);
@@ -224,7 +271,7 @@ void ad7606_init(void)
 	GPIO_WriteBit(AD_CS_PORT, AD_CS_PIN, Bit_SET); 
 
 	//没有过采样
-	GPIO_WriteBit(AD_OS0_PORT, AD_OS0_PIN, Bit_RESET);
+	GPIO_WriteBit(AD_OS0_PORT, AD_OS0_PIN, Bit_SET);
 	GPIO_WriteBit(AD_OS1_PORT, AD_OS1_PIN, Bit_RESET); 
 
 	GPIO_WriteBit(AD_RST_PORT, AD_RST_PIN, Bit_RESET);	 
@@ -291,7 +338,9 @@ void ad7606_init(void)
 	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
 	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
 	NVIC_Init(&NVIC_InitStructure);
-
+#ifdef AD_USE_PWM
+	ad_pwm();
+#endif
 }
 
 void ad_reset(void)
@@ -303,11 +352,25 @@ void ad_reset(void)
 
 long ad_start(void)
 {
+	GPIO_InitTypeDef GPIO_InitStructure;
+	//重新将Timer设置为缺省值
+	//TIM_DeInit(TIM3);
+	TIM_Cmd(TIM3,DISABLE);
+	GPIO_PinRemapConfig(GPIO_FullRemap_TIM3, DISABLE);
+
+	GPIO_InitStructure.GPIO_Pin = AD_CVA_PIN;          //启动采样
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;    //推挽输出
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+
+	GPIO_Init(AD_CVA_PORT, &GPIO_InitStructure);
+
 	GPIO_WriteBit(AD_CVA_PORT, AD_CVA_PIN, Bit_RESET);
 	rt_thread_delay(RT_TICK_PER_SECOND/1000);
 	GPIO_WriteBit(AD_CVA_PORT, AD_CVA_PIN, Bit_SET);
+
 	return 0;
 }
+
 #ifdef DMA_SPI3
 void EXTI1_IRQHandler(void) /* AD Data ok */
 {
@@ -320,7 +383,7 @@ void EXTI1_IRQHandler(void) /* AD Data ok */
   	//GPIO_WriteBit(AD_CS_PORT, AD_CS_PIN, Bit_RESET);
 	AD_CS_PORT->BRR = AD_CS_PIN;
   	DMA_SPI_Start(ad_dma_buf);
-    /* Clear the EXTI Line 4 */
+    /* Clear the EXTI Line 1 */
     EXTI_ClearITPendingBit(ADBUSY_EXTI_LINE);
   }
 }
@@ -353,7 +416,7 @@ long ad_pt(void)
 void DMA2_Channel1_IRQHandler(void)
 {
 	if(DMA_GetFlagStatus(DMA2_FLAG_TC1) == SET){
-		ad_pt();
+		//ad_pt();
 		DMA_ClearITPendingBit(DMA2_IT_TC1);
 		GPIO_WriteBit(AD_CVA_PORT, AD_CVA_PIN, Bit_SET);
 	}
@@ -394,6 +457,9 @@ void EXTI1_IRQHandler(void) /* AD Data ok */
 
 #ifdef RT_USING_FINSH
 FINSH_FUNCTION_EXPORT(ad_start, start ad7606 convert);
+#ifdef AD_USE_PWM
+FINSH_FUNCTION_EXPORT(ad_pwm, start timer3 pwm);
+#endif
 #ifdef DMA_SPI3
 FINSH_FUNCTION_EXPORT(ad_pt, print ad7606 convert result);
 #endif
