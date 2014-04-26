@@ -7,14 +7,59 @@
 #include <netif/ethernetif.h>
 #include "uploadapp.h"
 #include <stm32_eth.h>
+#include <finsh.h>
 
-//static char emptymbpool[4*POOLSIZE];
+#ifdef RT_USING_M3AD
+#include "driver/m3ad.h"
+#endif
+
+#ifdef FINSH_USING_SYMTAB
+static int udpsend = 0;
+#endif
+long reset(void);
+struct rt_event upeve;
 static char fullmbpool[4*POOLSIZE];
 
 //struct rt_mailbox emptymb;
 struct rt_mailbox fullmb;
+#ifdef RT_USING_M3AD
+void udp_send_m3ad_entry(void * parameter)
+{
+	int sockd;
+	int i = 0;
+	struct sockaddr_in taraddr;
+	struct netif * netif = (struct netif*)parameter;
+	rt_kprintf("ip address: %s\n", inet_ntoa(*((struct in_addr*)&(netif->ip_addr))));
+	sockd = socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP);
+	rt_kprintf("create socket %d\n",sockd);
+	taraddr.sin_family = AF_INET;
+	taraddr.sin_addr.s_addr = netif->ip_addr.addr | 0xff000000;
+	taraddr.sin_port = htons(9002);
+	
 
-void udp_send_entry(void * parameter)
+	do{
+		rt_uint32_t e = 0;
+		if(rt_event_recv(&upeve,(M3AD_EVENT),
+	        RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR,
+	        RT_WAITING_FOREVER, &e) == RT_EOK){
+#ifdef FINSH_USING_SYMTAB
+			if(udpsend){
+#endif
+			if(e&M3AD_EVENT){
+				i = sendto(sockd,(const void *)advalues,sizeof(advalues),0,(struct sockaddr *)&taraddr,sizeof(taraddr));
+			}
+			
+#ifdef FINSH_USING_SYMTAB
+	  		}
+#endif
+		}
+		else
+			i = -1;
+	}while(i >= 1);
+}
+#endif
+#ifdef RT_USING_AD7606
+void udp_send_ad7606_entry(void * parameter)
 {
 	int sockd;
 	int i = 0;
@@ -37,29 +82,55 @@ void udp_send_entry(void * parameter)
 	do{
 		rt_uint32_t fullindex = 0;
 		if(rt_mb_recv(&fullmb,&fullindex,RT_WAITING_FOREVER) == RT_EOK){
+#ifdef FINSH_USING_SYMTAB
+			if(udpsend){
+#endif
 			i = sendto(sockd,(const void *)ad_dma_buf[fullindex],AD_TIMES * AD_CHS * 2,0,(struct sockaddr *)&taraddr,sizeof(taraddr));
 			//i = sendto(sockd,"baga",4,0,(struct sockaddr *)&taraddr,sizeof(taraddr));
 			//rt_mb_send(&emptymb,fullindex);	
 			//rt_thread_delay(RT_TICK_PER_SECOND);
+#ifdef FINSH_USING_SYMTAB
+	  		}
+#endif
 		}
 		else
 			i = -1;
 	}while(i >= 1);
 	
 }
-
+#endif
 #ifdef RT_LWIP_DHCP
 static void netifstatus_callback_fn(struct netif *netif)
 {
-	rt_thread_t shnet_thread = rt_thread_create("upload",udp_send_entry,(void *)netif,2048,11,20);
+#ifdef RT_USING_AD7606
+	rt_thread_t shnet_thread;
+#endif
+#ifdef RT_USING_M3AD
+	rt_thread_t shm3ad_thread;
+#endif
+#ifdef RT_USING_AD7606
+	shnet_thread = rt_thread_create("adup",udp_send_ad7606_entry,(void *)netif,2048,11,20);
 	if(shnet_thread!=RT_NULL){
 		if(RT_EOK!=rt_thread_startup(shnet_thread)){
-		 	rt_kprintf("start smart home net thread failed!!!!\n");
+		 	rt_kprintf("start ad7606 net thread failed!!!!\n");
 		}
 	}
 	else{
-	 	rt_kprintf("create shnet thread failed!!!!\n");
+	 	rt_kprintf("create ad7606 thread failed!!!!\n");
 	}	
+#endif
+
+#ifdef RT_USING_M3AD
+	shm3ad_thread = rt_thread_create("m3up",udp_send_m3ad_entry,(void *)netif,2048,11,20);
+	if(shm3ad_thread!=RT_NULL){
+		if(RT_EOK!=rt_thread_startup(shm3ad_thread)){
+		 	rt_kprintf("start m3ad net thread failed!!!!\n");
+		}
+	}
+	else{
+	 	rt_kprintf("create m3ad thread failed!!!!\n");
+	}
+#endif
 }
 
 static void netiflink_callback_fn(struct netif *netif)
@@ -76,7 +147,7 @@ static void netiflink_callback_fn(struct netif *netif)
 	if((phy_bsr & PHY_Linked_Status) != 0 && hasstarted != 1) {
 		hasstarted = 1;
 		{
-			rt_thread_t upload_thread = rt_thread_create("upload",udp_send_entry,(void *)netif,2048,11,20);
+			rt_thread_t upload_thread = rt_thread_create("upload",udp_send_ad7606_entry,(void *)netif,2048,11,20);
 			if(upload_thread!=RT_NULL){
 				if(RT_EOK!=rt_thread_startup(upload_thread)){
 				 	rt_kprintf("start upload net thread failed!!!!\n");
@@ -84,6 +155,17 @@ static void netiflink_callback_fn(struct netif *netif)
 			}
 			else{
 			 	rt_kprintf("create upload thread failed!!!!\n");
+			}
+		}
+		{
+			rt_thread_t shm3ad_thread = rt_thread_create("m3up",udp_send_m3ad_entry,(void *)netif,2048,11,20);
+			if(shm3ad_thread!=RT_NULL){
+				if(RT_EOK!=rt_thread_startup(shm3ad_thread)){
+				 	rt_kprintf("start m3ad net thread failed!!!!\n");
+				}
+			}
+			else{
+			 	rt_kprintf("create m3ad thread failed!!!!\n");
 			}
 		}
 		
@@ -144,7 +226,9 @@ void netcheck(void * parameter)
 void netapp_start(void)
 {
 	struct netif * eth0 = netif_find("e0");
-	rt_thread_t netcheckthread = rt_thread_create("netck",netcheck,eth0,1024,20,20);
+	
+	rt_thread_t netcheckthread = rt_thread_create("netck",netcheck,eth0,1024,20,20);   
+	rt_event_init(&upeve, "upeve", RT_IPC_FLAG_FIFO);
 	if(netcheckthread){
 	 	rt_thread_startup(netcheckthread);
 	}
@@ -169,3 +253,7 @@ void netapp_start(void)
 #endif
 
 }
+
+#ifdef FINSH_USING_SYMTAB
+FINSH_VAR_EXPORT(udpsend, finsh_type_int, set send udp data)
+#endif

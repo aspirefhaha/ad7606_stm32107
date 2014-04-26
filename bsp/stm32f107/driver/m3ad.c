@@ -1,27 +1,34 @@
 #include <rtthread.h>
-#include "m3ad.h"	
 #include <stm32f10x_adc.h> 
 #include <stm32f10x_dma.h>
 #include <stdio.h>
 
 #include "finsh.h"
-#define MEAN_TIME	12
-#define M3ADC_CHANNELS	4
+#ifdef RT_USING_M3AD
+#include "../uploadapp.h"
+#include "m3ad.h"	
+#if USE_ADC_DMA		
 // 注：ADC为12位模数转换器，只有ADCConvertedValue的低12位有效
-static __IO uint16_t advalues[M3ADC_CHANNELS*MEAN_TIME];
+__IO uint16_t advalues[M3ADC_CHANNELS*MEAN_TIME];
+
+#endif
 
 void m3ad_init(void)
 {
 	GPIO_InitTypeDef GPIO_InitStructure;
 	ADC_InitTypeDef ADC_InitStructure;      //ADC初始化结构体声明 
+#if USE_ADC_DMA
 	DMA_InitTypeDef DMA_InitStructure;      //DMA初始化结构体声明
-	
-//	NVIC_InitTypeDef NVIC_InitStructure;
+#else	
+	NVIC_InitTypeDef NVIC_InitStructure;
+#endif
 	 ADC_DeInit(ADC1); 
+#if USE_ADC_DMA								
 	/* Enable DMA1 clock */
   	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
 	/* DMA1 channel1 configuration ----------------------------------------------*/
 	DMA_DeInit(DMA1_Channel1);
+	memset((void*)advalues,0,sizeof(advalues));
 
 	DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&ADC1->DR;    //DMA对应的外设基地址
 	DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)&advalues;   //内存存储基地址
@@ -38,7 +45,7 @@ void m3ad_init(void)
   
 	/* Enable DMA1 channel1 */
 	DMA_Cmd(DMA1_Channel1, ENABLE);
-
+#endif
 	RCC_ADCCLKConfig(RCC_PCLK2_Div2);
 	/* Enable ADC1 and GPIOC clock */
  	RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1 | RCC_APB2Periph_GPIOC, ENABLE);	
@@ -50,7 +57,11 @@ void m3ad_init(void)
 	GPIO_Init(GPIOC, &GPIO_InitStructure);
 
 	ADC_InitStructure.ADC_Mode = ADC_Mode_Independent;  //独立的转换模式
+#if USE_ADC_DMA
 	ADC_InitStructure.ADC_ScanConvMode = ENABLE;		  //开启扫描模式
+#else
+	ADC_InitStructure.ADC_ScanConvMode = DISABLE;		  //关闭扫描模式
+#endif
 	ADC_InitStructure.ADC_ContinuousConvMode = ENABLE;   //开启连续转换模式
 	ADC_InitStructure.ADC_ExternalTrigConv = ADC_ExternalTrigConv_None;	//ADC外部开关，关闭状态
 	ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;   //对齐方式,ADC为12位中，右对齐方式
@@ -59,13 +70,17 @@ void m3ad_init(void)
 
 	/* ADC1 regular channel10 configuration ADC通道组， 第10个通道 采样顺序1，转换时间 */ 	 	
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_10, 1, ADC_SampleTime_239Cycles5);
-
+#if USE_ADC_DMA
+#if M3ADC_CHANNELS==4
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_12, 2, ADC_SampleTime_239Cycles5);
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_13, 3, ADC_SampleTime_239Cycles5);
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_14, 4, ADC_SampleTime_239Cycles5);
-
+#endif
 	/* Enable ADC1 DMA */
-	ADC_DMACmd(ADC1, ENABLE);	  //ADC命令，使能
+	ADC_DMACmd(ADC1, ENABLE);	  //ADC DMA命令，使能	 
+#else
+	ADC_DMACmd(ADC1,DISABLE);	//ADC DMA 
+#endif
 	/* Enable ADC1 */
 	ADC_Cmd(ADC1, ENABLE);  //开启ADC1
 	
@@ -78,19 +93,21 @@ void m3ad_init(void)
 	/* Check the end of ADC1 calibration */
 	while(ADC_GetCalibrationStatus(ADC1));	   //等待校准完成
 
-/*	
+#if USE_ADC_DMA
+
+#else	
 	//设置中断向量
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
 	NVIC_InitStructure.NVIC_IRQChannel = ADC1_2_IRQn;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 3;
 	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
 	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure);														  
-*/
+#endif
 	/* Start ADC1 Software Conversion */ 
 	ADC_SoftwareStartConvCmd(ADC1, ENABLE);	//连续转换开始，ADC通过DMA方式不断的更新RAM区。
 }
-
+#if USE_ADC_DMA
 long m3ad_print(void)
 {	 
 	int i = 0;
@@ -102,6 +119,7 @@ long m3ad_print(void)
 			values[i]+= advalues[j*4 + i];
 		}
 	 	printf("\tchannel %d: %04x,%.4fV\n",i,values[i]/MEAN_TIME,values[i]/MEAN_TIME*3.3f/4096); 
+		rt_event_send(&upeve,M3AD_EVENT);
 	}  
 	//printf("\n");
 	return 0;
@@ -123,21 +141,26 @@ long m3ad_th(void)
 	}
 	return 0;
 }
+#else
 
 
-
-/*void ADC1_2_IRQHandler(void)
+void ADC1_2_IRQHandler(void)
 {
 	unsigned short Valuetemp=ADC_GetConversionValue(ADC1);   //返回最近一次ADC1的转换结果   问题就在这里，如果一次只测一个通道，那么返回的就是要测的值，如果是扫描7个通道呢？这里面该怎么取值？                                
 	rt_kprintf("M3AD Value %x\n",Valuetemp);
 	ADC_ClearITPendingBit(ADC1,ADC_IT_EOC);//清楚中断标志
-} */
+} 
+#endif
 
 #ifdef RT_USING_FINSH
+#if USE_ADC_DMA
 FINSH_FUNCTION_EXPORT(m3ad_print,print m3ad cur value);
 FINSH_FUNCTION_EXPORT(m3ad_th,m3ad thread);
+#endif
 #ifdef FINSH_USING_SYMTAB
 //FINSH_VAR_EXPORT(advalue, finsh_type_uint, value of m3ad for finsh)
+#endif
+
 #endif
 
 #endif

@@ -67,6 +67,7 @@
 #define RT_CONSOLEBUF_SIZE	128
 
 #define RT_USING_AD7606
+#define RT_USING_M3AD
 
 /* SECTION: finsh, a C-Express shell */
 #define RT_USING_FINSH

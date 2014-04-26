@@ -22,8 +22,12 @@
 
 #ifdef RT_USING_AD7606
 #include "driver/ad7606.h"
+#endif		
+#ifdef RT_USING_M3AD			   
 #include "driver/m3ad.h"
 #endif
+#include "driver/iepe.h"
+#include "driver/skf797l.h"
 
 /**
  * @addtogroup STM32
@@ -96,8 +100,12 @@ void rtthread_startup(void)
 
 #ifdef RT_USING_AD7606
 	ad7606_init();
+#endif		 
+#ifdef RT_USING_M3AD
 	m3ad_init();
 #endif
+	iepe_init();
+	skf_init();
 
 	/* init scheduler system */
 	rt_system_scheduler_init();
