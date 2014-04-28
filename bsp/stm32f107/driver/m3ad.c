@@ -71,9 +71,13 @@ void m3ad_init(void)
 	/* ADC1 regular channel10 configuration ADC通道组， 第10个通道 采样顺序1，转换时间 */ 	 	
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_10, 1, ADC_SampleTime_239Cycles5);
 #if USE_ADC_DMA
-#if M3ADC_CHANNELS==4
+#if M3ADC_CHANNELS > 1
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_12, 2, ADC_SampleTime_239Cycles5);
+#endif
+#if M3ADC_CHANNELS > 2
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_13, 3, ADC_SampleTime_239Cycles5);
+#endif
+#if M3ADC_CHANNELS > 3
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_14, 4, ADC_SampleTime_239Cycles5);
 #endif
 	/* Enable ADC1 DMA */
@@ -108,38 +112,44 @@ void m3ad_init(void)
 	ADC_SoftwareStartConvCmd(ADC1, ENABLE);	//连续转换开始，ADC通过DMA方式不断的更新RAM区。
 }
 #if USE_ADC_DMA
-long m3ad_print(void)
+static int m3ap = 0;
+static int m3af = 1;
+void m3ad_print(void)
 {	 
 	int i = 0;
 	int j = 0;
-	unsigned int values[4]={0};
-	printf("m3ad values: \n");
-	for(i=0;i<4;i++){
-		for(j=0;j<MEAN_TIME;j++){
-			values[i]+= advalues[j*4 + i];
+	unsigned int values[M3ADC_CHANNELS]={0};
+	if(m3ap){
+		printf("m3ad values: \n");
+		for(i=0;i<M3ADC_CHANNELS;i++){
+			for(j=0;j<MEAN_TIME;j++){
+				values[i]+= advalues[j*M3ADC_CHANNELS + i];
+			}
+			printf("\tchannel %d: 0x%04x,%d,%.4fV\n",i,values[i]/MEAN_TIME,values[i]/MEAN_TIME,19.51 *(2.042 - (values[i]/MEAN_TIME) *3.29 / 4096)); 
 		}
-	 	printf("\tchannel %d: %04x,%.4fV\n",i,values[i]/MEAN_TIME,values[i]/MEAN_TIME*3.3f/4096); 
-		rt_event_send(&upeve,M3AD_EVENT);
-	}  
-	//printf("\n");
-	return 0;
+	}
+	rt_event_send(&upeve,M3AD_EVENT);
+	return;
 }
 
 static void m3ad_entry(void * parameter)
 {
  	while(1){
-		rt_thread_delay(RT_TICK_PER_SECOND);
+		rt_thread_delay(RT_TICK_PER_SECOND/m3af);
 		m3ad_print();
 	}
 }
 
-long m3ad_th(void)
+void m3ad_th(void)
 {
  	rt_thread_t m3adthread = rt_thread_create("m3ad",m3ad_entry,RT_NULL,1024,9,10);
 	if(m3adthread){
 	 	rt_thread_startup(m3adthread);
 	}
-	return 0;
+	else{
+	 	rt_kprintf("create m3ad thread failed!!!!!\n");
+	}
+	return;
 }
 #else
 
@@ -154,8 +164,10 @@ void ADC1_2_IRQHandler(void)
 
 #ifdef RT_USING_FINSH
 #if USE_ADC_DMA
-FINSH_FUNCTION_EXPORT(m3ad_print,print m3ad cur value);
-FINSH_FUNCTION_EXPORT(m3ad_th,m3ad thread);
+#ifdef FINSH_USING_SYMTAB
+FINSH_VAR_EXPORT(m3ap, finsh_type_int, print m3ad data)
+FINSH_VAR_EXPORT(m3af, finsh_type_int, m3ad sample rate)
+#endif
 #endif
 #ifdef FINSH_USING_SYMTAB
 //FINSH_VAR_EXPORT(advalue, finsh_type_uint, value of m3ad for finsh)

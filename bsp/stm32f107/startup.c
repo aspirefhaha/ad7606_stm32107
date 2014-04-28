@@ -28,6 +28,7 @@
 #endif
 #include "driver/iepe.h"
 #include "driver/skf797l.h"
+#include "led.h"
 
 /**
  * @addtogroup STM32
@@ -104,9 +105,10 @@ void rtthread_startup(void)
 #ifdef RT_USING_M3AD
 	m3ad_init();
 #endif
+	led_config();
+	led_turn_off_all();
 	iepe_init();
 	skf_init();
-
 	/* init scheduler system */
 	rt_system_scheduler_init();
 	rt_hw_rtc_init();

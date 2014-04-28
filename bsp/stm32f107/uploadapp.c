@@ -14,7 +14,7 @@
 #endif
 
 #ifdef FINSH_USING_SYMTAB
-static int udpsend = 0;
+static int udps = 0;
 #endif
 long reset(void);
 struct rt_event upeve;
@@ -43,7 +43,7 @@ void udp_send_m3ad_entry(void * parameter)
 	        RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR,
 	        RT_WAITING_FOREVER, &e) == RT_EOK){
 #ifdef FINSH_USING_SYMTAB
-			if(udpsend){
+			if(udps){
 #endif
 			if(e&M3AD_EVENT){
 				i = sendto(sockd,(const void *)advalues,sizeof(advalues),0,(struct sockaddr *)&taraddr,sizeof(taraddr));
@@ -51,6 +51,9 @@ void udp_send_m3ad_entry(void * parameter)
 			
 #ifdef FINSH_USING_SYMTAB
 	  		}
+			else{
+			 	i = 1;
+			}
 #endif
 		}
 		else
@@ -83,7 +86,7 @@ void udp_send_ad7606_entry(void * parameter)
 		rt_uint32_t fullindex = 0;
 		if(rt_mb_recv(&fullmb,&fullindex,RT_WAITING_FOREVER) == RT_EOK){
 #ifdef FINSH_USING_SYMTAB
-			if(udpsend){
+			if(udps){
 #endif
 			i = sendto(sockd,(const void *)ad_dma_buf[fullindex],AD_TIMES * AD_CHS * 2,0,(struct sockaddr *)&taraddr,sizeof(taraddr));
 			//i = sendto(sockd,"baga",4,0,(struct sockaddr *)&taraddr,sizeof(taraddr));
@@ -206,7 +209,7 @@ void netcheck(void * parameter)
 		   }
 		             
 		}
-		if(((phy_bsr & PHY_Linked_Status) != 0))                                                          /*                网络线重新连接                */
+		if(((phy_bsr & PHY_Linked_Status) != 0))/* 网络线重新连接 */
 		{
 		     if(oldstate == 1){
 
@@ -255,5 +258,5 @@ void netapp_start(void)
 }
 
 #ifdef FINSH_USING_SYMTAB
-FINSH_VAR_EXPORT(udpsend, finsh_type_int, set send udp data)
+FINSH_VAR_EXPORT(udps, finsh_type_int, set send udp data)
 #endif

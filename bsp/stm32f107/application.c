@@ -38,6 +38,10 @@
 #endif
 #include "finsh.h"
 
+#ifdef RT_USING_M3AD
+#include "driver/m3ad.h"	  
+#endif
+
 void rt_init_thread_entry(void* parameter)
 {
 /* Filesystem Initialization */
@@ -83,6 +87,9 @@ void rt_init_thread_entry(void* parameter)
 #endif
 #ifdef RT_USING_LWIP	
 	netapp_start();
+#endif
+#ifdef RT_USING_M3AD
+	m3ad_th();
 #endif
 }
 

@@ -2,6 +2,7 @@
 #include "stm32f10x.h"
 #include <stdio.h>
 #include <finsh.h>
+#include "../led.h"
 
 #define SKF_PORT		GPIOB
 #define SKF_PIN		    GPIO_Pin_5
@@ -36,13 +37,12 @@ void skf_init(void)
 
 
 }
-static int dicount=0;
 void EXTI9_5_IRQHandler(void)
 {
   if(EXTI_GetITStatus(EXTI_Line5) != RESET)
   {
-	dicount++;
-	//rt_kprintf("once skf\n");   
+	rt_kprintf("once skf\n");  
+	led_flash();
     /* Clear the EXTI Line 5 */
     EXTI_ClearITPendingBit(EXTI_Line5);
   }
@@ -54,29 +54,11 @@ long skf_st(void)
 	return 0;
 }
 
-void io_count_entry(void * parameter)
-{
- 	while(1){
-	 	rt_thread_delay(RT_TICK_PER_SECOND);
-		printf("io count %d",dicount);
-		dicount=0;
-	}
-}
 
-long skf_th(void)
-{
- 	rt_thread_t io_th = rt_thread_create("skf_th",io_count_entry,RT_NULL,2048,10,20);
-	if(io_th){
-	 	rt_thread_startup(io_th);
-	}
-	else{
-	 	rt_kprintf("create skf th failed!");
-	}
-	return 0;
-}
+
+
 
 #ifdef RT_USING_FINSH	   
 FINSH_FUNCTION_EXPORT(skf_st, print skf state);
 
-FINSH_FUNCTION_EXPORT(skf_th, start io count thread);
 #endif
