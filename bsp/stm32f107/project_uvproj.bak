@@ -431,6 +431,16 @@
               <FileType>1</FileType>
               <FilePath>.\putchar.c</FilePath>
             </File>
+            <File>
+              <FileName>uploadapp.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\uploadapp.c</FilePath>
+            </File>
+            <File>
+              <FileName>rtc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\rtc.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -970,6 +980,21 @@
               <FileName>ad7606.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\driver\ad7606.c</FilePath>
+            </File>
+            <File>
+              <FileName>m3ad.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\driver\m3ad.c</FilePath>
+            </File>
+            <File>
+              <FileName>iepe.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\driver\iepe.c</FilePath>
+            </File>
+            <File>
+              <FileName>skf797l.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\driver\skf797l.c</FilePath>
             </File>
           </Files>
         </Group>
