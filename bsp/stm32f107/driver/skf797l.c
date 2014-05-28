@@ -35,7 +35,6 @@ void skf_init(void)
 	NVIC_InitStructure.NVIC_IRQChannelCmd=ENABLE;
 	NVIC_Init(&NVIC_InitStructure);
 
-
 }
 void EXTI9_5_IRQHandler(void)
 {

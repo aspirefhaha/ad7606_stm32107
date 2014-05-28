@@ -274,7 +274,7 @@ void ad7606_init(void)
 
 	//没有过采样
 	GPIO_WriteBit(AD_OS0_PORT, AD_OS0_PIN, Bit_SET);
-	GPIO_WriteBit(AD_OS1_PORT, AD_OS1_PIN, Bit_RESET); 
+	GPIO_WriteBit(AD_OS1_PORT, AD_OS1_PIN, Bit_SET); 
 
 	GPIO_WriteBit(AD_RST_PORT, AD_RST_PIN, Bit_RESET);	 
 
