@@ -91,6 +91,20 @@ void rt_init_thread_entry(void* parameter)
 #ifdef RT_USING_M3AD
 	m3ad_th();
 #endif
+#if 0
+	ad_timers_init();
+	{
+		int i = 0 ;
+		while(1){
+			i++;
+			if(i>=10)
+				i=0;	
+			rt_kprintf("set gear %d",i);
+			set_gear(i);						  
+			rt_thread_delay(RT_TICK_PER_SECOND * 20);
+		}
+	}
+#endif
 }
 
 int rt_application_init()

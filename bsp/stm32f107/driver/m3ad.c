@@ -65,7 +65,7 @@ void m3ad_init(void)
 	ADC_InitStructure.ADC_ContinuousConvMode = ENABLE;   //开启连续转换模式
 	ADC_InitStructure.ADC_ExternalTrigConv = ADC_ExternalTrigConv_None;	//ADC外部开关，关闭状态
 	ADC_InitStructure.ADC_DataAlign = ADC_DataAlign_Right;   //对齐方式,ADC为12位中，右对齐方式
-	ADC_InitStructure.ADC_NbrOfChannel = M3ADC_CHANNELS;	 //开启通道数，1个
+	ADC_InitStructure.ADC_NbrOfChannel = M3ADC_CHANNELS;	 //开启通道数，4个
 	ADC_Init(ADC1, &ADC_InitStructure);
 
 	/* ADC1 regular channel10 configuration ADC通道组， 第10个通道 采样顺序1，转换时间 */ 	 	

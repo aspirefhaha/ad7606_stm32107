@@ -6,6 +6,7 @@
 #include <lwip/netif.h>
 #include <netif/ethernetif.h>
 #include "uploadapp.h"
+#include "netcnf.h"
 #include <stm32_eth.h>
 #include <finsh.h>
 
@@ -81,7 +82,7 @@ void udp_send_ad7606_entry(void * parameter)
 	for(i=1;i<POOLSIZE;i++){	  //从1开始是因为刚开始 0不需要获取，肯定能用
 		//rt_mb_send(&emptymb,(rt_uint32_t)i);
 	}
-	ad_pwm();
+	ad_timers_init();
 	do{
 		rt_uint32_t fullindex = 0;
 		if(rt_mb_recv(&fullmb,&fullindex,RT_WAITING_FOREVER) == RT_EOK){
@@ -149,6 +150,7 @@ static void netiflink_callback_fn(struct netif *netif)
 	rt_kprintf("netif link callback\n");	
 	if((phy_bsr & PHY_Linked_Status) != 0 && hasstarted != 1) {
 		hasstarted = 1;
+#ifdef RT_USING_AD7606
 		{
 			rt_thread_t upload_thread = rt_thread_create("upload",udp_send_ad7606_entry,(void *)netif,2048,11,20);
 			if(upload_thread!=RT_NULL){
@@ -160,6 +162,8 @@ static void netiflink_callback_fn(struct netif *netif)
 			 	rt_kprintf("create upload thread failed!!!!\n");
 			}
 		}
+#endif
+#ifdef 	RT_USING_M3AD	
 		{
 			rt_thread_t shm3ad_thread = rt_thread_create("m3up",udp_send_m3ad_entry,(void *)netif,2048,11,20);
 			if(shm3ad_thread!=RT_NULL){
@@ -171,7 +175,20 @@ static void netiflink_callback_fn(struct netif *netif)
 			 	rt_kprintf("create m3ad thread failed!!!!\n");
 			}
 		}
-		
+#endif
+#ifdef RT_USING_AD7606
+		{
+		 	rt_thread_t shnet_thread = rt_thread_create("netcnf",tcp_netcom_entry,(void *)netif,2048,11,20);
+			if(shnet_thread!=RT_NULL){
+				if(RT_EOK!=rt_thread_startup(shnet_thread)){
+				 	rt_kprintf("start tcp confif thread failed!!!!\n");
+				}
+			}
+			else{
+			 	rt_kprintf("create shnet thread failed!!!!\n");
+			}	
+		}
+#endif		
 	}
 }
 static void netifstatus_callback_fn(struct netif *netif)

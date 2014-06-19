@@ -11,7 +11,8 @@ extern volatile unsigned short ad_dma_buf[POOLSIZE][AD_TIMES*AD_CHS];
 extern struct rt_event upeve;
 
 void netapp_start(void);
-long ad_pwm(void);
+long ad_timers_init(void);
+long set_gear(int gear);
 
 #define M3AD_EVENT 1<<1
 #endif

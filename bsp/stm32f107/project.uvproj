@@ -446,6 +446,11 @@
               <FileType>1</FileType>
               <FilePath>.\led.c</FilePath>
             </File>
+            <File>
+              <FileName>netcnf.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\netcnf.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
