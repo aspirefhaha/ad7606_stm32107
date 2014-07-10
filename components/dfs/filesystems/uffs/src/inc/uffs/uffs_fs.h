@@ -48,7 +48,6 @@
 extern "C"{
 #endif
 
-
 /** file object */
 struct uffs_ObjectSt {
 	/******* objects manager ********/
@@ -92,6 +91,7 @@ uffs_Pool * uffs_GetObjectPool(void);
 
 URET uffs_InitObjectBuf(void);
 URET uffs_ReleaseObjectBuf(void);
+int uffs_PutAllObjectBuf(uffs_Device *dev);
 uffs_Object * uffs_GetObject(void);
 void uffs_PutObject(uffs_Object *obj);
 int uffs_GetObjectIndex(uffs_Object *obj);
@@ -126,6 +126,7 @@ URET uffs_FlushObject(uffs_Object *obj);
 URET uffs_RenameObject(const char *old_name, const char *new_name, int *err);
 URET uffs_DeleteObject(const char * name, int *err);
 
+int uffs_GetFreeObjectHandlers(void);
 
 
 #ifdef __cplusplus

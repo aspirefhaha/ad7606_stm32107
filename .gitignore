@@ -1,2 +1,3 @@
 obj
 bsp/stm32f107/JLinkLog.txt
+bsp/stm32f107/build

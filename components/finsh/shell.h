@@ -1,11 +1,26 @@
 /*
- * File      : shell.h
- * This file is part of RT-Thread RTOS
- * COPYRIGHT (C) 2006 - 2011, RT-Thread Development Team
+ *  shell implementation for finsh shell.
  *
- * The license and distribution terms for this file may be
- * found in the file LICENSE in this distribution or at
- * http://www.rt-thread.org/license/LICENSE
+ * COPYRIGHT (C) 2006 - 2013, RT-Thread Development Team
+ *
+ *  This file is part of RT-Thread (http://www.rt-thread.org)
+ *  Maintainer: bernard.xiong <bernard.xiong at gmail.com>
+ *
+ *  All rights reserved.
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  * Change Logs:
  * Date           Author       Notes
@@ -36,17 +51,17 @@ const char* finsh_get_prompt(void);
 #endif
 
 #ifdef FINSH_USING_HISTORY
+	#ifndef FINSH_HISTORY_LINES
+		#define FINSH_HISTORY_LINES 5
+	#endif
+#endif
+
 enum input_stat
 {
 	WAIT_NORMAL,
 	WAIT_SPEC_KEY,
 	WAIT_FUNC_KEY,
 };
-	#ifndef FINSH_HISTORY_LINES
-		#define FINSH_HISTORY_LINES 5
-	#endif
-#endif
-
 struct finsh_shell
 {
 	struct rt_semaphore rx_sem;
@@ -54,19 +69,21 @@ struct finsh_shell
 	enum input_stat stat;
 
 	rt_uint8_t echo_mode:1;
-	rt_uint8_t use_history:1;
 
 #ifdef FINSH_USING_HISTORY
-	rt_uint8_t current_history;
+	rt_uint16_t current_history;
 	rt_uint16_t history_count;
 
 	char cmd_history[FINSH_HISTORY_LINES][FINSH_CMD_SIZE];
 #endif
 
+#ifndef FINSH_USING_MSH_ONLY
 	struct finsh_parser parser;
+#endif
 
 	char line[FINSH_CMD_SIZE];
 	rt_uint8_t line_position;
+	rt_uint8_t line_curpos;
 
 	rt_device_t device;
 };
@@ -74,7 +91,7 @@ struct finsh_shell
 void finsh_set_echo(rt_uint32_t echo);
 rt_uint32_t finsh_get_echo(void);
 
-void finsh_system_init(void);
+int finsh_system_init(void);
 void finsh_set_device(const char* device_name);
 const char* finsh_get_device(void);
 

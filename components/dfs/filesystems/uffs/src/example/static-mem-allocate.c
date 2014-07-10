@@ -40,7 +40,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "uffs/uffs_config.h"
+#include "uffs_config.h"
 #include "uffs/uffs_public.h"
 #include "uffs/uffs_fs.h"
 #include "uffs/uffs_utils.h"
@@ -49,17 +49,18 @@
 #include "cmdline.h"
 #include "uffs_fileem.h"
 
-#define PFX "static-example: "
+#define PFX "sexp: "
 
 #if CONFIG_USE_STATIC_MEMORY_ALLOCATOR == 0
 int main()
 {
-	uffs_Perror(UFFS_ERR_NORMAL, "This example need CONFIG_USE_STATIC_MEMORY_ALLOCATOR = 1");
+	uffs_Perror(UFFS_MSG_NORMAL, "This example need CONFIG_USE_STATIC_MEMORY_ALLOCATOR = 1");
 	return 0;
 }
 #else
 
 extern struct cli_commandset * get_helper_cmds(void);
+extern struct cli_commandset * get_test_cmds(void);
 
 #define PAGE_DATA_SIZE    512
 #define PAGE_SPARE_SIZE   16
@@ -123,17 +124,24 @@ static int init_uffs_fs(void)
 	/* register mount table */
 	uffs_RegisterMountTable(mtbl);
 
-	return uffs_InitMountTable() == U_SUCC ? 0 : -1;
+	/* mount it */
+	uffs_Mount("/");
+
+	return uffs_InitFileSystemObjects() == U_SUCC ? 0 : -1;
 }
 
 static int release_uffs_fs(void)
 {
-	return uffs_ReleaseMountTable();
+	uffs_UnMount("/");
+
+	return uffs_ReleaseFileSystemObjects();
 }
 
 int main(int argc, char *argv[])
 {
 	int ret;
+
+	uffs_SetupDebugOutput(); 	// setup debug output as early as possible
 
 	ret = init_uffs_fs();
 
@@ -144,7 +152,7 @@ int main(int argc, char *argv[])
 
 	cli_add_commandset(get_helper_cmds());
 	cli_add_commandset(get_test_cmds());
-	cliMain();
+	cli_main_entry();
 
 	release_uffs_fs();
 

@@ -42,11 +42,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include "uffs_config.h"
 #include "uffs/uffs_device.h"
 #include "uffs_fileem.h"
 
 #define PFX "femu: "
+#define MSGLN(msg,...) uffs_Perror(UFFS_MSG_NORMAL, msg, ## __VA_ARGS__)
+#define MSG(msg,...) uffs_PerrorRaw(UFFS_MSG_NORMAL, msg, ## __VA_ARGS__)
+
+// #define UFFS_FEMU_SHOW_FLASH_IO
 
 #ifdef UFFS_FEMU_ENABLE_INJECTION
 
@@ -58,18 +62,18 @@ struct uffs_FileEmuBitFlip {
 };
 
 /* simulate bad blocks */
-#define FILEEMU_STOCK_BAD_BLOCKS	{5, 18}		// bad block come from manufacture
-#define FILEEMU_ERASE_BAD_BLOCKS	{10, 15}	// new bad block discovered when erasing
+#define FILEEMU_STOCK_BAD_BLOCKS	{5, 180}	// bad block come from manufacture
+#define FILEEMU_ERASE_BAD_BLOCKS	{100, 150}	// new bad block discovered when erasing
 
 /* simulating bit flip */
 #define FILEEMU_WRITE_BIT_FLIP \
 	{ \
-		{2, 2, 10, 1 << 4}, /* block 2, page 2, offset 10, bit 4 */	\
-		{2, 4, -3, 1 << 2}, /* block 2, page 4, spare offset 3, bit 2*/ \
-		{6, 1, 5, 1 << 3},	/* block 6, page 1, offset 5, bit 3 */ \
-		{6, 1, 15, 1 << 7},	/* block 6, page 1, offset 300, bit 7 */ \
-		{8, 2, 2, 1 << 1},	/* block 8, page 2, offset 2, bit 1 */ \
-		{8, 2, 100, 1 << 5},/* block 8, page 2, offset 100, bit 5 */ \
+		{20, 2, 10, 1 << 4},	/* block 20, page 2, offset 10, bit 4 */	\
+		{24, 4, -3, 1 << 2},	/* block 24, page 4, spare offset 3, bit 2*/ \
+		{60, 1, 5, 1 << 3},		/* block 60, page 1, offset 5, bit 3 */ \
+		{66, 1, 15, 1 << 7},	/* block 66, page 1, offset 300, bit 7 */ \
+		{80, 2, 2, 1 << 1},		/* block 80, page 2, offset 2, bit 1 */ \
+		{88, 2, 100, 1 << 5},	/* block 88, page 2, offset 100, bit 5 */ \
 	}
 
 
@@ -77,6 +81,8 @@ static int femu_InitFlash_wrap(uffs_Device *dev);
 
 static int femu_ReadPage_wrap(uffs_Device *dev, u32 block, u32 page, u8 *data, int data_len, u8 *ecc,
 							u8 *spare, int spare_len);
+static int femu_ReadPageWithLayout_wrap(uffs_Device *dev, u32 block, u32 page, u8* data, int data_len, u8 *ecc,
+									uffs_TagStore *ts, u8 *ecc_store);
 static int femu_WritePage_wrap(uffs_Device *dev, u32 block, u32 page,
 							const u8 *data, int data_len, const u8 *spare, int spare_len);
 static int femu_WritePageWithLayout_wrap(uffs_Device *dev, u32 block, u32 page, const u8* data, int data_len, const u8 *ecc,
@@ -101,8 +107,8 @@ void femu_setup_wrapper_functions(uffs_Device *dev)
 		dev->ops->EraseBlock = femu_EraseBlock_wrap;
 	if (dev->ops->ReadPage)
 		dev->ops->ReadPage = femu_ReadPage_wrap;
-	//if (dev->ops->ReadPageWithLayout)
-	//	dev->ops->ReadPageWithLayout = femu_ReadPageWithLayout_wrap;
+	if (dev->ops->ReadPageWithLayout)
+		dev->ops->ReadPageWithLayout = femu_ReadPageWithLayout_wrap;
 	if (dev->ops->WritePage)
 		dev->ops->WritePage = femu_WritePage_wrap;
 	if (dev->ops->WritePageWithLayout)
@@ -115,7 +121,7 @@ static int femu_InitFlash_wrap(uffs_Device *dev)
 	uffs_FileEmu *emu = (uffs_FileEmu *)(dev->attr->_private);
 
 #ifdef FILEEMU_STOCK_BAD_BLOCKS
-	int bad_blocks[] = FILEEMU_STOCK_BAD_BLOCKS;
+	u32 bad_blocks[] = FILEEMU_STOCK_BAD_BLOCKS;
 	int j;
 	u8 x = 0;
 	struct uffs_StorageAttrSt *attr = dev->attr;
@@ -149,10 +155,37 @@ static int femu_ReadPage_wrap(uffs_Device *dev, u32 block, u32 page, u8 *data, i
 {
 	uffs_FileEmu *emu = (uffs_FileEmu *)(dev->attr->_private);
 
-	//printf("femu: Read block %d page %d data %d spare %d\n", block, page, data_len, spare_len);	
-
+#ifdef UFFS_FEMU_SHOW_FLASH_IO
+	if (data || spare) {
+		MSG(PFX " Read block %d page %d", block, page);
+		if (data)
+			MSG(" DATA[%d]", data_len);
+		if (spare)
+			MSG(" SPARE[%d]", spare_len);
+		MSG(TENDSTR);
+	}
+#endif
 	return emu->ops_orig.ReadPage(dev, block, page, data, data_len, ecc, spare, spare_len);
 }
+
+static int femu_ReadPageWithLayout_wrap(uffs_Device *dev, u32 block, u32 page, u8* data, int data_len, u8 *ecc,
+									uffs_TagStore *ts, u8 *ecc_store)
+{
+	uffs_FileEmu *emu = (uffs_FileEmu *)(dev->attr->_private);
+
+#ifdef UFFS_FEMU_SHOW_FLASH_IO
+	if (data || ts) {
+		MSG(PFX " Read block %d page %d", block, page);
+		if (data)
+			MSG(" DATA[%d]", data_len);
+		if (ts)
+			MSG(" TS");
+		MSG(TENDSTR);
+	}
+#endif
+	return emu->ops_orig.ReadPageWithLayout(dev, block, page, data, data_len, ecc, ts, ecc_store);
+}
+
 
 ////////////////////// wraper functions ///////////////////////////
 
@@ -204,7 +237,16 @@ static int femu_WritePage_wrap(uffs_Device *dev, u32 block, u32 page,
 	uffs_FileEmu *emu = (uffs_FileEmu *)(dev->attr->_private);
 	int ret;
 
-	//printf("femu: Write block %d page %d data %d spare %d\n", block, page, data_len, spare_len);	
+#ifdef UFFS_FEMU_SHOW_FLASH_IO
+	if (data || spare) {
+		MSG(PFX " Write block %d page %d", block, page);
+		if (data)
+			MSG(" DATA[%d]", data_len);
+		if (spare)
+			MSG(" SPARE[%d]", spare_len);
+		MSG(TENDSTR);
+	}
+#endif
 	
 	ret = emu->ops_orig.WritePage(dev, block, page, data, data_len, spare, spare_len);
 
@@ -218,9 +260,18 @@ static int femu_WritePageWithLayout_wrap(uffs_Device *dev, u32 block, u32 page, 
 {
 	uffs_FileEmu *emu = (uffs_FileEmu *)(dev->attr->_private);
 	int ret;
-
-	//printf("femu: Write block %d page %d data %d spare %d\n", block, page, data_len, spare_len);	
 	
+#ifdef UFFS_FEMU_SHOW_FLASH_IO
+	if (data || ts) {
+		MSG(PFX " Write block %d page %d", block, page);
+		if (data)
+			MSG(" DATA[%d]", data_len);
+		if (ts)
+			MSG(" TS");
+		MSG(TENDSTR);
+	}
+#endif
+
 	ret = emu->ops_orig.WritePageWithLayout(dev, block, page, data, data_len, ecc, ts);
 
 	InjectBitFlip(dev, block, page);

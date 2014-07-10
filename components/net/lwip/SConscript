@@ -11,7 +11,7 @@ src/api/netifapi.c
 src/api/sockets.c
 src/api/tcpip.c
 src/arch/sys_arch.c
-src/arch/sys_arch_init.c
+src/core/def.c
 src/core/dhcp.c
 src/core/dns.c
 src/core/init.c
@@ -24,6 +24,7 @@ src/core/sys.c
 src/core/tcp.c
 src/core/tcp_in.c
 src/core/tcp_out.c
+src/core/timers.c
 src/core/udp.c
 src/core/ipv4/autoip.c
 src/core/ipv4/icmp.c
@@ -35,7 +36,6 @@ src/core/ipv4/ip_addr.c
 src/core/ipv4/ip_frag.c
 src/netif/etharp.c
 src/netif/ethernetif.c
-src/netif/loopif.c
 src/netif/slipif.c
 """)
 
@@ -82,6 +82,6 @@ if GetDepend(['RT_LWIP_PPP']):
 if GetDepend(['RT_USING_NETUTILS']):
     src += Glob('./apps/*.c')
 
-group = DefineGroup('LwIP', src, depend = ['RT_USING_LWIP'], CPPPATH = path)
+group = DefineGroup('LwIP', src, depend = ['RT_USING_LWIP', 'RT_USING_LWIP140'], CPPPATH = path)
 
 Return('group')

@@ -35,99 +35,82 @@
  * \brief output debug messages
  * \author Ricky Zheng, created 10th May, 2005
  */
+#include "uffs_config.h"
+#include "uffs/uffs_os.h"
 #include "uffs/uffs_public.h"
+
+#if !defined(RT_THREAD)
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 
+#define MAX_DEBUG_MSG_LINE_LENGTH	128
 
-#if !defined(_UBASE_)
-#define ENABLE_DEBUG
-//#define OUTPUT_TOFILE
-#endif
+static struct uffs_DebugMsgOutputSt * m_ops = NULL;
+static int m_msg_level = UFFS_MSG_NORMAL;
 
-#if !defined(_UBASE_)
-
-
-#ifdef OUTPUT_TOFILE
-#define DEBUG_LOGFILE	"log.txt"
-#endif
-
-void uffs_DebugMessage(int level, const char *prefix, const char *suffix, const char *errFmt, ...)
+static void uffs_vprintf(const char *fmt, va_list args)
 {
+	char line_buf[MAX_DEBUG_MSG_LINE_LENGTH];
 
-#ifdef ENABLE_DEBUG
-	if (level >= UFFS_DBG_LEVEL) {
-
-		char buf[1024] = {0};
-		char *p;
-		
-
-#ifdef OUTPUT_TOFILE
-		FILE *fp = NULL;	
+	if (m_ops && m_ops->output) {
+#ifdef _COMPILER_CLIB_DO_NOT_HAVE_VSNPRINTF_
+		vsprintf(line_buf, fmt, args);
+#else
+		vsnprintf(line_buf, MAX_DEBUG_MSG_LINE_LENGTH, fmt, args);
 #endif
-		
-		va_list arg;
+		m_ops->output(line_buf);
+	}
+}
 
-		if (strlen(errFmt) > 800) {
-			// dangerous!!
-			rt_kprintf("uffs_Perror buffer is not enough !");
-			return;
-		}
+/**
+ * \brief Initialize debug message output functions
+ */
+URET uffs_InitDebugMessageOutput(struct uffs_DebugMsgOutputSt *ops, int msg_level)
+{
+	m_ops = ops;
 
-		p = buf;
+	if (m_ops == NULL || m_ops->output == NULL) {
+		m_ops = NULL;
+		return U_FAIL;
+	}
+	else if (m_ops->vprintf == NULL)
+		m_ops->vprintf = uffs_vprintf;
 
-		if (prefix) {
-			strcpy(p, prefix);
-			p += strlen(prefix);
-		}
+	m_msg_level = msg_level;
+
+	return U_SUCC;
+}
+
+void uffs_DebugSetMessageLevel(int msg_level)
+{
+	m_msg_level = msg_level;
+}
+#endif
+
+#ifdef CONFIG_ENABLE_UFFS_DEBUG_MSG
+
+/**
+ * \brief The main debug message output function
+ */
+#if !defined(RT_THREAD)
+void uffs_DebugMessage(int level, const char *prefix,
+					   const char *suffix, const char *errFmt, ...)
+{
+	va_list arg;
+
+	if (m_ops && level >= m_msg_level) {
+		if (prefix)
+			m_ops->output(prefix);
 
 		va_start(arg, errFmt);
-		vsprintf(p, errFmt, arg);
+		m_ops->vprintf(errFmt, arg);
 		va_end(arg);
 
 		if (suffix)
-			strcat(p, suffix);
-
-#ifdef OUTPUT_TOFILE
-		fp = fopen(DEBUG_LOGFILE, "a+b");
-		if (fp) {
-			fwrite(buf, 1, strlen(buf), fp);
-			fclose(fp);
-		}
-#else
-		rt_kprintf("%s", buf);
-#endif
+			m_ops->output(suffix);
 	}
-#endif //ENABLE_DEBUG
 }
-
-#else
-
-#define ENABLE_DEBUG
-
-#include <uBase.h>
-#include <sys/debug.h>
-
-
-void uffs_Perror( int level, const char *errFmt, ...)
-{
-#ifdef ENABLE_DEBUG
-	va_list args;
-	if (level >= UFFS_DBG_LEVEL) {
-		va_start(args, errFmt);
-		//uffs_vTrace(errFmt, args);
-		dbg_simple_vprintf(errFmt, args);
-		va_end(args);
-	}
-	dbg_simple_raw(TENDSTR);
-#else
-	level = level;
-	errFmt = errFmt;
-#endif //ENABLE_DEBUG
-}
-
-#endif
 
 /**
  * \brief Called when an assert occurred.
@@ -137,8 +120,69 @@ void uffs_Perror( int level, const char *errFmt, ...)
  * \param[in] line Source line of code
  * \param[in] msg Assert message
  */
-void uffs_AssertCall(const char *file, int line, const char *msg)
+void uffs_AssertCall(const char *file, int line, const char *msg, ...)
 {
-	rt_kprintf("ASSERT %s:%d - msg:%s\n", file, line, msg);
-	while (1);
+	va_list args;
+	char buf[32];
+
+	if (m_ops && m_msg_level < UFFS_MSG_NOMSG) {
+		m_ops->output("ASSERT ");
+		m_ops->output(file);
+		sprintf(buf, ":%d - :", line);
+		m_ops->output(buf);
+		va_start(args, msg);
+		m_ops->vprintf(msg, args);
+		va_end(args);
+		m_ops->output(TENDSTR);
+	}
 }
+#endif
+
+#ifdef _COMPILER_DO_NOT_SUPPORT_MACRO_VALIST_REPLACE_
+void uffs_Perror(int level, const char *fmt, ...)
+{
+	va_list args;
+	if (m_ops && level >= m_msg_level) {
+		va_start(args, fmt);
+		m_ops->vprintf(fmt, args);
+		va_end(args);
+		m_ops->output(TENDSTR);
+	}
+}
+
+void uffs_PerrorRaw(int level, const char *fmt, ...)
+{
+	va_list args;
+	if (m_ops && level >= m_msg_level) {
+		va_start(args, fmt);
+		m_ops->vprintf(fmt, args);
+		va_end(args);
+	}
+}
+
+UBOOL uffs_Assert(UBOOL expr, const char *fmt, ...)
+{
+	va_list args;
+	if (m_ops && !expr && m_msg_level < UFFS_MSG_NOMSG) {
+		m_ops->output("ASSERT FAILED: ");
+		va_start(args, fmt);
+		m_ops->vprintf(fmt, args);
+		va_end(args);
+		m_ops->output(TENDSTR);
+	}
+	return expr ? U_TRUE : U_FALSE;
+}
+#endif
+
+#else
+
+void uffs_DebugMessage(int level, const char *prefix, const char *suffix, const char *errFmt, ...) {};
+void uffs_AssertCall(const char *file, int line, const char *msg, ...) {};
+
+#ifdef _COMPILER_DO_NOT_SUPPORT_MACRO_VALIST_REPLACE_
+void uffs_Perror(int level, const char *fmt, ...) {}
+void uffs_PerrorRaw(int level, const char *fmt, ...) {}
+UBOOL uffs_Assert(UBOOL expr, const char *fmt, ...) { return expr ? U_TRUE : U_FALSE; }
+#endif
+
+#endif

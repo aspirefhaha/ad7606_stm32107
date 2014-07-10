@@ -30,28 +30,38 @@
   on this file might be covered by the GNU General Public License.
 */
 
-#ifndef UFFS_OS_H
-#define UFFS_OS_H
+#ifndef _UFFS_OS_H_
+#define _UFFS_OS_H_
+
+#include <rtthread.h>
+#define RT_THREAD
+#if !defined(RT_THREAD)
+#include <stdarg.h>
+#endif
 
 #ifdef __cplusplus
 extern "C"{
 #endif
 
-#include "uffs/uffs_device.h"
-#include "uffs/uffs_core.h"
-
 #define UFFS_TASK_ID_NOT_EXIST	-1
 
-typedef int OSSEM;
+typedef void * OSSEM;
+#define OSSEM_NOT_INITED	(NULL)
+
+#if !defined(RT_THREAD)
+struct uffs_DebugMsgOutputSt {
+	void (*output)(const char *msg);
+	void (*vprintf)(const char *fmt, va_list args);
+};
+
+void uffs_SetupDebugOutput(void);
+#endif
 
 /* OS specific functions */
-int uffs_SemCreate(int n);
-int uffs_SemWait(int sem);
-int uffs_SemSignal(int sem);
-int uffs_SemDelete(int sem);
-
-void uffs_CriticalEnter(void);
-void uffs_CriticalExit(void);
+int uffs_SemCreate(OSSEM *sem);
+int uffs_SemWait(OSSEM sem);
+int uffs_SemSignal(OSSEM sem);
+int uffs_SemDelete(OSSEM *sem);
 
 int uffs_OSGetTaskId(void);	//get current task id
 unsigned int uffs_GetCurDateTime(void);

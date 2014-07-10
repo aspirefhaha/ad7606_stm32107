@@ -17,6 +17,7 @@ SET (libuffs_SRCS
 		uffs_find.c
 		uffs_flash.c
 		uffs_version.c
+		uffs_crc.c
 	 )
 
 SET (HDR ${uffs_SOURCE_DIR}/src/inc/uffs)
@@ -26,7 +27,6 @@ SET (libuffs_HEADS
 		${HDR}/uffs_badblock.h
 		${HDR}/uffs_blockinfo.h
 		${HDR}/uffs_buf.h 
-		${HDR}/uffs_config.h 
 		${HDR}/uffs_core.h 
 		${HDR}/uffs_device.h
 		${HDR}/uffs_ecc.h
@@ -43,7 +43,17 @@ SET (libuffs_HEADS
 		${HDR}/uffs_find.h
 		${HDR}/uffs_flash.h
 		${HDR}/uffs_version.h
+		${HDR}/uffs_crc.h
    )
 
+IF (UNIX)
+INCLUDE_DIRECTORIES(${uffs_SOURCE_DIR}/src/platform/posix)
+ENDIF()
+
+IF (WIN32)
+INCLUDE_DIRECTORIES(${uffs_SOURCE_DIR}/src/platform/win32)
+ENDIF()
+
 INCLUDE_DIRECTORIES(${uffs_SOURCE_DIR}/src/inc)
+
 ADD_LIBRARY( uffs STATIC ${libuffs_SRCS} ${libuffs_HEADS} )

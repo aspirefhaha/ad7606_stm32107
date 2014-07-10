@@ -41,15 +41,48 @@
 
 #include "uffs/uffs_device.h"
 
+#define UFFS_FEMU_FILE_NAME		"uffsemfile.bin"
+
+#define UFFS_FEMU_MAX_BLOCKS	(1024 * 16)		// maximum 16K blocks
+
+#define UFFS_FEMU_ENABLE_INJECTION		// enable bad block & ecc error injection
+
+extern struct uffs_FlashOpsSt g_femu_ops_ecc_soft;		// for software ECC or no ECC.
+extern struct uffs_FlashOpsSt g_femu_ops_ecc_hw;		// for hardware ECC
+extern struct uffs_FlashOpsSt g_femu_ops_ecc_hw_auto;	// for auto hardware ECC
+
+#define PAGE_DATA_WRITE_COUNT_LIMIT		1
+#define PAGE_SPARE_WRITE_COUNT_LIMIT	1
+
 typedef struct uffs_FileEmuSt {
 	int initCount;
 	FILE *fp;
-	u8 *em_monitor_page;
-	u8 * em_monitor_spare;
+	FILE *dump_fp;
+	u8 *em_monitor_page;		// page write monitor
+	u8 * em_monitor_spare;		// spare write monitor
+	u32 *em_monitor_block;		// block erease monitor
 	const char *emu_filename;
+#ifdef UFFS_FEMU_ENABLE_INJECTION
+	struct uffs_FlashOpsSt ops_orig;
+	UBOOL wrap_inited;
+#endif
 } uffs_FileEmu;
 
-void uffs_fileem_setup_device(uffs_Device *dev);
+/* file emulator device init/release entry */
+URET femu_InitDevice(uffs_Device *dev);
+URET femu_ReleaseDevice(uffs_Device *dev);
+
+struct uffs_StorageAttrSt * femu_GetStorage(void);
+struct uffs_FileEmuSt * femu_GetPrivate(void);
+
+#ifdef UFFS_FEMU_ENABLE_INJECTION
+void femu_setup_wrapper_functions(uffs_Device *dev);
+#endif
+
+/* internal used functions, shared by all ecc option implementations */
+int femu_InitFlash(uffs_Device *dev);
+int femu_ReleaseFlash(uffs_Device *dev);
+int femu_EraseBlock(uffs_Device *dev, u32 blockNumber);
 
 #endif
 

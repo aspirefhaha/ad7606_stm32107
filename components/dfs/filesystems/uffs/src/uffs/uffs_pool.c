@@ -35,9 +35,11 @@
  * \brief Fast fixed size memory pool management.
  * \author Ricky Zheng, Simon Kallweit
  */
- 
+
+#include "uffs_config.h" 
 #include "uffs/uffs_types.h"
 #include "uffs/uffs_os.h"
+#include "uffs/uffs_public.h"
 #include "uffs/uffs_pool.h"
 
 /*
@@ -74,22 +76,28 @@
  * \param[in] num_bufs number of buffers
  * \return Returns U_SUCC if successful.
  */
-URET uffs_PoolInit(uffs_Pool *pool, void *mem, u32 mem_size, u32 buf_size, u32 num_bufs)
+URET uffs_PoolInit(uffs_Pool *pool,
+				   void *mem, u32 mem_size, u32 buf_size, u32 num_bufs)
 {
 	unsigned int i;
 	uffs_PoolEntry *e1, *e2;
 
-	uffs_Assert(pool, "pool missing");
-	uffs_Assert(mem, "pool memory missing");
-	uffs_Assert(num_bufs > 0, "not enough buffers");
-	uffs_Assert(buf_size % sizeof(void *) == 0, "buffer size not aligned to pointer size");
-	uffs_Assert(mem_size == num_bufs * buf_size, "pool memory size is wrong");
+	if (!uffs_Assert(pool != NULL, "pool missing") ||
+		!uffs_Assert(mem != NULL, "pool memory missing") ||
+		!uffs_Assert(num_bufs > 0, "not enough buffers") ||
+		!uffs_Assert(buf_size % sizeof(void *) == 0,
+					"buffer size not aligned to pointer size") ||
+		!uffs_Assert(mem_size == num_bufs * buf_size,
+					"pool memory size is wrong"))
+	{
+		return U_FAIL;
+	}
 
 	pool->mem = (u8 *)mem;
 	pool->buf_size = buf_size;
 	pool->num_bufs = num_bufs;
-	pool->sem = uffs_SemCreate(1);
-	
+
+	uffs_SemCreate(&pool->sem);	
 	uffs_SemWait(pool->sem);
 
 	// Initialize the free_list
@@ -112,10 +120,10 @@ URET uffs_PoolInit(uffs_Pool *pool, void *mem, u32 mem_size, u32 buf_size, u32 n
  */
 UBOOL uffs_PoolVerify(uffs_Pool *pool, void *p)
 {
-	return  p &&
-			(u8 *)p >= pool->mem &&
-			(u8 *)p < pool->mem + (pool->buf_size * pool->num_bufs) &&
-			(((u8 *)p - pool->mem) % pool->buf_size) == 0	? U_TRUE : U_FALSE;
+	return p &&
+		(u8 *)p >= pool->mem &&
+		(u8 *)p < pool->mem + (pool->buf_size * pool->num_bufs) &&
+		(((u8 *)p - pool->mem) % pool->buf_size) == 0 ? U_TRUE : U_FALSE;
 }
 
 /**
@@ -125,10 +133,10 @@ UBOOL uffs_PoolVerify(uffs_Pool *pool, void *p)
  */
 URET uffs_PoolRelease(uffs_Pool *pool)
 {
-	uffs_Assert(pool, "pool missing");
+	if (!uffs_Assert(pool != NULL, "pool missing"))
+		return U_FAIL;
 	
-	uffs_SemDelete(pool->sem);
-	pool->sem = 0;
+	uffs_SemDelete(&pool->sem);
 
 	return U_SUCC;
 }
@@ -142,7 +150,8 @@ void *uffs_PoolGet(uffs_Pool *pool)
 {
 	uffs_PoolEntry *e;
 
-	uffs_Assert(pool, "pool missing");
+	if (!uffs_Assert(pool != NULL, "pool missing"))
+		return NULL;
 
 	e = pool->free_list;
 	if (e)
@@ -162,7 +171,8 @@ void *uffs_PoolGetLocked(uffs_Pool *pool)
 {
 	uffs_PoolEntry *e;
 
-	uffs_Assert(pool, "pool missing");
+	if (!uffs_Assert(pool != NULL, "pool missing"))
+		return NULL;
 
 	uffs_SemWait(pool->sem);
 	e = pool->free_list;
@@ -183,7 +193,8 @@ int uffs_PoolPut(uffs_Pool *pool, void *p)
 {
 	uffs_PoolEntry *e = (uffs_PoolEntry *)p;
 
-	uffs_Assert(pool, "pool missing");
+	if (!uffs_Assert(pool != NULL, "pool missing"))
+		return -1;
 
 	if (e) {
 		e->next = pool->free_list;
@@ -206,7 +217,8 @@ int uffs_PoolPutLocked(uffs_Pool *pool, void *p)
 {
 	uffs_PoolEntry *e = (uffs_PoolEntry *)p;
 
-	uffs_Assert(pool, "pool missing");
+	if (!uffs_Assert(pool != NULL, "pool missing"))
+		return -1;
 
 	if (e) {
 		uffs_SemWait(pool->sem);
@@ -228,8 +240,12 @@ int uffs_PoolPutLocked(uffs_Pool *pool, void *p)
  */
 void *uffs_PoolGetBufByIndex(uffs_Pool *pool, u32 index)
 {
-	uffs_Assert(pool, "pool missing");
-	uffs_Assert(index < pool->num_bufs, "index out of range");
+	if (!uffs_Assert(pool != NULL, "pool missing") ||
+		!uffs_Assert(index < pool->num_bufs,
+				"index(%d) out of range(max %d)", index, pool->num_bufs))
+	{
+		return NULL;
+	}
 
 	return (u8 *) pool->mem + index * pool->buf_size;
 }
@@ -243,10 +259,13 @@ void *uffs_PoolGetBufByIndex(uffs_Pool *pool, u32 index)
  */
 u32 uffs_PoolGetIndex(uffs_Pool *pool, void *p)
 {
-	uffs_Assert(pool, "pool missing");
-	uffs_Assert(p >= (void *) pool->mem &&
+	if (!uffs_Assert(pool != NULL, "pool missing") ||
+		!uffs_Assert(p >= (void *) pool->mem &&
 			p < (void *) (pool->mem + pool->num_bufs * pool->buf_size),
-			"pointer out of range");
+			"pointer out of range"))
+	{
+		uffs_Panic();
+	}
 
 	return ((u8 *) p - pool->mem) / pool->buf_size;
 }
@@ -277,9 +296,12 @@ static void * FindNextAllocatedInSmallPool(uffs_Pool *pool, void *from)
 	for (e = pool->free_list; e; e = e->next)
 		map |= (1 << uffs_PoolGetIndex(pool, e));
 
-	for (i = uffs_PoolGetIndex(pool, from); (map & (1 << i)) && i < 32; i++);
+	for (i = uffs_PoolGetIndex(pool, from);
+			(map & (1 << i)) && i < 32 && i < pool->num_bufs;
+				i++);
 
-	return i < 32 ? uffs_PoolGetBufByIndex(pool, i) : NULL;
+	return i < 32 && i < pool->num_bufs ?
+			uffs_PoolGetBufByIndex(pool, i) : NULL;
 }
 
 
@@ -310,7 +332,7 @@ void * uffs_PoolFindNextAllocated(uffs_Pool *pool, void *from)
 	// otherwise move to next entry and search free list again.
 
 	if (pool->free_list) {
-		while (e == NULL && uffs_PoolVerify(pool, p)) {
+		while (uffs_PoolVerify(pool, p)) {
 			e = pool->free_list;
 			while (e) {
 				if (p == (u8 *)e) {
@@ -319,7 +341,9 @@ void * uffs_PoolFindNextAllocated(uffs_Pool *pool, void *from)
 				}
 				e = e->next;
 			}
-		}
+			if (e == NULL)	// not in free_list, gotcha
+				break;
+		}	
 	}
 
 	return uffs_PoolVerify(pool, p) ? p : NULL ;
@@ -338,6 +362,25 @@ int uffs_PoolGetFreeCount(uffs_Pool *pool)
 		count++;
 		e = e->next;
 	}
+
+	return count;
+}
+
+/**
+ * \brief put all memory block back, return how many memory blocks were put back
+ */
+int uffs_PoolPutAll(uffs_Pool *pool)
+{
+	void *p = NULL;
+	int count = 0;
+
+	do {
+		p = uffs_PoolFindNextAllocated(pool, p);
+		if (p) {
+			uffs_PoolPut(pool, p);
+			count++;
+		}
+	} while (p);
 
 	return count;
 }

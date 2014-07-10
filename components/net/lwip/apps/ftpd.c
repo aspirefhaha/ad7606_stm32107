@@ -35,10 +35,10 @@ struct ftp_session
 };
 static struct ftp_session* session_list = NULL;
 
-static int ftp_process_request(struct ftp_session* session, char * buf);
-static int ftp_get_filesize(char *filename);
+int ftp_process_request(struct ftp_session* session, char * buf);
+int ftp_get_filesize(char *filename);
 
-static struct ftp_session* ftp_new_session()
+struct ftp_session* ftp_new_session()
 {
 	struct ftp_session* session;
 
@@ -50,7 +50,7 @@ static struct ftp_session* ftp_new_session()
 	return session;
 }
 
-static void ftp_close_session(struct ftp_session* session)
+void ftp_close_session(struct ftp_session* session)
 {
 	struct ftp_session* list;
 
@@ -71,7 +71,7 @@ static void ftp_close_session(struct ftp_session* session)
 	rt_free(session);
 }
 
-static int ftp_get_filesize(char * filename)
+int ftp_get_filesize(char * filename)
 {
 	int pos;
 	int end;
@@ -88,7 +88,7 @@ static int ftp_get_filesize(char * filename)
 	return end;
 }
 
-static rt_bool_t is_absolute_path(char* path)
+rt_bool_t is_absolute_path(char* path)
 {
 #ifdef _WIN32
 	if (path[0] == '\\' ||
@@ -101,7 +101,7 @@ static rt_bool_t is_absolute_path(char* path)
 	return RT_FALSE;
 }
 
-static int build_full_path(struct ftp_session* session, char* path, char* new_path, size_t size)
+int build_full_path(struct ftp_session* session, char* path, char* new_path, size_t size)
 {
 	if (is_absolute_path(path) == RT_TRUE)
 		strcpy(new_path, path);
@@ -113,7 +113,7 @@ static int build_full_path(struct ftp_session* session, char* path, char* new_pa
 	return 0;
 }
 
-static void ftpd_thread_entry(void* parameter)
+void ftpd_thread_entry(void* parameter)
 {
 	int numbytes;
 	int sockfd, maxfdp1;
@@ -223,7 +223,7 @@ static void ftpd_thread_entry(void* parameter)
 	// rt_free(buffer);
 }
 
-static int do_list(char* directory, int sockfd)
+int do_list(char* directory, int sockfd)
 {
 	DIR* dirp;
 	struct dirent* entry;
@@ -272,7 +272,7 @@ static int do_list(char* directory, int sockfd)
 	return 0;
 }
 
-static int do_simple_list(char* directory, int sockfd)
+int do_simple_list(char* directory, int sockfd)
 {
 	DIR* dirp;
 	struct dirent* entry;
@@ -299,7 +299,7 @@ static int do_simple_list(char* directory, int sockfd)
 	return 0;
 }
 
-static int str_begin_with(char* src, char* match)
+int str_begin_with(char* src, char* match)
 {
 	while (*match)
 	{
@@ -313,7 +313,7 @@ static int str_begin_with(char* src, char* match)
 	return 0;
 }
 
-static int ftp_process_request(struct ftp_session* session, char *buf)
+int ftp_process_request(struct ftp_session* session, char *buf)
 {
 	int  fd;
 	struct timeval tv;

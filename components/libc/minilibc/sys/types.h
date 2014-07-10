@@ -15,8 +15,13 @@ typedef rt_uint32_t u_long;
 typedef rt_time_t time_t;
 typedef int mode_t;
 
+typedef unsigned long clockid_t;
+typedef int pid_t;
+
 #ifndef NULL
 #define NULL RT_NULL
 #endif
+
+#define __u_char_defined
 
 #endif

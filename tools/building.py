@@ -2,431 +2,13 @@ import os
 import sys
 import string
 
-import xml.etree.ElementTree as etree
-from xml.etree.ElementTree import SubElement
-
 from SCons.Script import *
+from utils import _make_path_relative
 
 BuildOptions = {}
 Projects = []
 Rtt_Root = ''
 Env = None
-fs_encoding = sys.getfilesystemencoding()
-
-def _get_filetype(fn):
-    if fn.rfind('.c') != -1 or fn.rfind('.C') != -1 or fn.rfind('.cpp') != -1:
-        return 1
-
-    # assemble file type
-    if fn.rfind('.s') != -1 or fn.rfind('.S') != -1:
-        return 2
-
-    # header type
-    if fn.rfind('.h') != -1:
-        return 5
-
-    # other filetype
-    return 5
-
-def splitall(loc):
-    """
-    Return a list of the path components in loc. (Used by relpath_).
-
-    The first item in the list will be  either ``os.curdir``, ``os.pardir``, empty,
-    or the root directory of loc (for example, ``/`` or ``C:\\).
-
-    The other items in the list will be strings.
-
-    Adapted from *path.py* by Jason Orendorff.
-    """
-    parts = []
-    while loc != os.curdir and loc != os.pardir:
-        prev = loc
-        loc, child = os.path.split(prev)
-        if loc == prev:
-            break
-        parts.append(child)
-    parts.append(loc)
-    parts.reverse()
-    return parts
-
-def _make_path_relative(origin, dest):
-    """
-    Return the relative path between origin and dest.
-
-    If it's not possible return dest.
-
-
-    If they are identical return ``os.curdir``
-
-    Adapted from `path.py <http://www.jorendorff.com/articles/python/path/>`_ by Jason Orendorff.
-    """
-    origin = os.path.abspath(origin).replace('\\', '/')
-    dest = os.path.abspath(dest).replace('\\', '/')
-    #
-    orig_list = splitall(os.path.normcase(origin))
-    # Don't normcase dest!  We want to preserve the case.
-    dest_list = splitall(dest)
-    #
-    if orig_list[0] != os.path.normcase(dest_list[0]):
-        # Can't get here from there.
-        return dest
-    #
-    # Find the location where the two paths start to differ.
-    i = 0
-    for start_seg, dest_seg in zip(orig_list, dest_list):
-        if start_seg != os.path.normcase(dest_seg):
-            break
-        i += 1
-    #
-    # Now i is the point where the two paths diverge.
-    # Need a certain number of "os.pardir"s to work up
-    # from the origin to the point of divergence.
-    segments = [os.pardir] * (len(orig_list) - i)
-    # Need to add the diverging part of dest_list.
-    segments += dest_list[i:]
-    if len(segments) == 0:
-        # If they happen to be identical, use os.curdir.
-        return os.curdir
-    else:
-        # return os.path.join(*segments).replace('\\', '/')
-        return os.path.join(*segments)
-
-def xml_indent(elem, level=0):
-    i = "\n" + level*"  "
-    if len(elem):
-        if not elem.text or not elem.text.strip():
-            elem.text = i + "  "
-        if not elem.tail or not elem.tail.strip():
-            elem.tail = i
-        for elem in elem:
-            xml_indent(elem, level+1)
-        if not elem.tail or not elem.tail.strip():
-            elem.tail = i
-    else:
-        if level and (not elem.tail or not elem.tail.strip()):
-            elem.tail = i
-
-def IARAddGroup(parent, name, files, project_path):
-    group = SubElement(parent, 'group')
-    group_name = SubElement(group, 'name')
-    group_name.text = name
-    
-    for f in files:
-        fn = f.rfile()
-        name = fn.name
-        path = os.path.dirname(fn.abspath)
-    
-        basename = os.path.basename(path)
-        path = _make_path_relative(project_path, path)
-        path = os.path.join(path, name)
-        
-        file = SubElement(group, 'file')
-        file_name = SubElement(file, 'name')
-        file_name.text = ('$PROJ_DIR$\\' + path).decode(fs_encoding)
-
-iar_workspace = '''<?xml version="1.0" encoding="iso-8859-1"?>
-
-<workspace>
-  <project>
-    <path>$WS_DIR$\%s</path>
-  </project>
-  <batchBuild/>
-</workspace>
-
-
-'''
-
-def IARWorkspace(target):
-    # make an workspace 
-    workspace = target.replace('.ewp', '.eww')
-    out = file(workspace, 'wb')
-    xml = iar_workspace % target
-    out.write(xml)
-    out.close()
-    
-def IARProject(target, script):
-    project_path = os.path.dirname(os.path.abspath(target))
-
-    tree = etree.parse('template.ewp')
-    root = tree.getroot()
-
-    out = file(target, 'wb')
-
-    CPPPATH = []
-    CPPDEFINES = []
-    LINKFLAGS = ''
-    CCFLAGS = ''
-    
-    # add group
-    for group in script:
-        IARAddGroup(root, group['name'], group['src'], project_path)
-
-        # get each include path
-        if group.has_key('CPPPATH') and group['CPPPATH']:
-            CPPPATH += group['CPPPATH']
-        
-        # get each group's definitions
-        if group.has_key('CPPDEFINES') and group['CPPDEFINES']:
-            CPPDEFINES += group['CPPDEFINES']
-        
-        # get each group's link flags
-        if group.has_key('LINKFLAGS') and group['LINKFLAGS']:
-            LINKFLAGS += group['LINKFLAGS']
-    
-    # make relative path 
-    paths = set()
-    for path in CPPPATH:
-        inc = _make_path_relative(project_path, os.path.normpath(path))
-        paths.add(inc) #.replace('\\', '/')
-    
-    # setting options
-    options = tree.findall('configuration/settings/data/option')
-    for option in options:
-        # print option.text
-        name = option.find('name')
-        
-        if name.text == 'CCIncludePath2':
-            for path in paths:
-                state = SubElement(option, 'state')
-                state.text = '$PROJ_DIR$\\' + path
-        if name.text == 'CCDefines':
-            for define in CPPDEFINES:
-                state = SubElement(option, 'state')
-                state.text = define
-    
-    xml_indent(root)
-    out.write(etree.tostring(root, encoding='utf-8'))
-    out.close()
-    
-    IARWorkspace(target)
-    
-def MDK4AddGroup(ProjectFiles, parent, name, files, project_path):
-    group = SubElement(parent, 'Group')
-    group_name = SubElement(group, 'GroupName')
-    group_name.text = name
-
-    for f in files:
-        fn = f.rfile()
-        name = fn.name
-        path = os.path.dirname(fn.abspath)
-
-        basename = os.path.basename(path)
-        path = _make_path_relative(project_path, path)
-        path = os.path.join(path, name)
-        
-        files = SubElement(group, 'Files')
-        file = SubElement(files, 'File')
-        file_name = SubElement(file, 'FileName')
-        name = os.path.basename(path)
-        if ProjectFiles.count(name):
-            name = basename + '_' + name
-        ProjectFiles.append(name)
-        file_name.text = name.decode(fs_encoding)
-        file_type = SubElement(file, 'FileType')
-        file_type.text = '%d' % _get_filetype(name)
-        file_path = SubElement(file, 'FilePath')
-        
-        file_path.text = path.decode(fs_encoding)
-
-def MDK4Project(target, script):
-    project_path = os.path.dirname(os.path.abspath(target))
-    
-    tree = etree.parse('template.uvproj')
-    root = tree.getroot()
-    
-    out = file(target, 'wb')
-    out.write('<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n')
-    
-    CPPPATH = []
-    CPPDEFINES = []
-    LINKFLAGS = ''
-    CCFLAGS = ''
-    ProjectFiles = []
-    
-    # add group
-    groups = tree.find('Targets/Target/Groups')
-    if not groups:
-        groups = SubElement(tree.find('Targets/Target'), 'Groups')
-    for group in script:
-        group_xml = MDK4AddGroup(ProjectFiles, groups, group['name'], group['src'], project_path)
-        
-        # get each include path
-        if group.has_key('CPPPATH') and group['CPPPATH']:
-            if CPPPATH:
-                CPPPATH += group['CPPPATH']
-            else:
-                CPPPATH += group['CPPPATH']
-        
-        # get each group's definitions
-        if group.has_key('CPPDEFINES') and group['CPPDEFINES']:
-            if CPPDEFINES:
-                CPPDEFINES += group['CPPDEFINES']
-            else:
-                CPPDEFINES += group['CPPDEFINES']
-        
-        # get each group's link flags
-        if group.has_key('LINKFLAGS') and group['LINKFLAGS']:
-            if LINKFLAGS:
-                LINKFLAGS += ' ' + group['LINKFLAGS']
-            else:
-                LINKFLAGS += group['LINKFLAGS']
-    
-    # remove repeat path
-    paths = set()
-    for path in CPPPATH:
-        inc = _make_path_relative(project_path, os.path.normpath(path))
-        paths.add(inc) #.replace('\\', '/')
-    
-    paths = [i for i in paths]
-    paths.sort()
-    CPPPATH = string.join(paths, ';')
-    
-    definitions = [i for i in set(CPPDEFINES)]
-    CPPDEFINES = string.join(definitions, ', ')
-    
-    # write include path, definitions and link flags
-    IncludePath = tree.find('Targets/Target/TargetOption/TargetArmAds/Cads/VariousControls/IncludePath')
-    IncludePath.text = CPPPATH
-    
-    Define = tree.find('Targets/Target/TargetOption/TargetArmAds/Cads/VariousControls/Define')
-    Define.text = CPPDEFINES
-
-    Misc = tree.find('Targets/Target/TargetOption/TargetArmAds/LDads/Misc')
-    Misc.text = LINKFLAGS
-    
-    xml_indent(root)
-    out.write(etree.tostring(root, encoding='utf-8'))
-    out.close()
-    
-def MDKProject(target, script):
-    template = file('template.Uv2', "rb")
-    lines = template.readlines()
-
-    project = file(target, "wb")
-    project_path = os.path.dirname(os.path.abspath(target))
-
-    line_index = 5
-    # write group
-    for group in script:
-        lines.insert(line_index, 'Group (%s)\r\n' % group['name'])
-        line_index += 1
-
-    lines.insert(line_index, '\r\n')
-    line_index += 1
-
-    # write file
-
-    ProjectFiles = []
-    CPPPATH = []
-    CPPDEFINES = []
-    LINKFLAGS = ''
-    CCFLAGS = ''
-
-    # number of groups
-    group_index = 1
-    for group in script:
-        # print group['name']
-
-        # get each include path
-        if group.has_key('CPPPATH') and group['CPPPATH']:
-            if CPPPATH:
-                CPPPATH += group['CPPPATH']
-            else:
-                CPPPATH += group['CPPPATH']
-
-        # get each group's definitions
-        if group.has_key('CPPDEFINES') and group['CPPDEFINES']:
-            if CPPDEFINES:
-                CPPDEFINES += ';' + group['CPPDEFINES']
-            else:
-                CPPDEFINES += group['CPPDEFINES']
-
-        # get each group's link flags
-        if group.has_key('LINKFLAGS') and group['LINKFLAGS']:
-            if LINKFLAGS:
-                LINKFLAGS += ' ' + group['LINKFLAGS']
-            else:
-                LINKFLAGS += group['LINKFLAGS']
-
-        # generate file items
-        for node in group['src']:
-            fn = node.rfile()
-            name = fn.name
-            path = os.path.dirname(fn.abspath)
-            basename = os.path.basename(path)
-            path = _make_path_relative(project_path, path)
-            path = os.path.join(path, name)
-            if ProjectFiles.count(name):
-                name = basename + '_' + name
-            ProjectFiles.append(name)
-            lines.insert(line_index, 'File %d,%d,<%s><%s>\r\n'
-                % (group_index, _get_filetype(name), path, name))
-            line_index += 1
-
-        group_index = group_index + 1
-
-    lines.insert(line_index, '\r\n')
-    line_index += 1
-
-    # remove repeat path
-    paths = set()
-    for path in CPPPATH:
-        inc = _make_path_relative(project_path, os.path.normpath(path))
-        paths.add(inc) #.replace('\\', '/')
-
-    paths = [i for i in paths]
-    CPPPATH = string.join(paths, ';')
-
-    definitions = [i for i in set(CPPDEFINES)]
-    CPPDEFINES = string.join(definitions, ', ')
-
-    while line_index < len(lines):
-        if lines[line_index].startswith(' ADSCINCD '):
-            lines[line_index] = ' ADSCINCD (' + CPPPATH + ')\r\n'
-
-        if lines[line_index].startswith(' ADSLDMC ('):
-            lines[line_index] = ' ADSLDMC (' + LINKFLAGS + ')\r\n'
-
-        if lines[line_index].startswith(' ADSCDEFN ('):
-            lines[line_index] = ' ADSCDEFN (' + CPPDEFINES + ')\r\n'
-
-        line_index += 1
-
-    # write project
-    for line in lines:
-        project.write(line)
-
-    project.close()
-
-def BuilderProject(target, script):
-    project = file(target, "wb")
-    project_path = os.path.dirname(os.path.abspath(target))
-
-    # write file
-
-    CPPPATH = []
-    CPPDEFINES = []
-    LINKFLAGS = ''
-    CCFLAGS = ''
-
-    # number of groups
-    group_index = 1
-    for group in script:
-        # print group['name']
-
-        # generate file items
-        for node in group['src']:
-            fn = node.rfile()
-            name = fn.name
-            path = os.path.dirname(fn.abspath)
-            path = _make_path_relative(project_path, path)
-            path = os.path.join(path, name)
-            project.write('%s\r\n' % path)
-
-        group_index = group_index + 1
-
-    project.close()
 
 class Win32Spawn:
     def spawn(self, sh, escape, cmd, args, env):
@@ -435,13 +17,9 @@ class Win32Spawn:
         newargs = string.join(args[1:], ' ')
         cmdline = cmd + " " + newargs
         startupinfo = subprocess.STARTUPINFO()
-        #startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        penv = {}
-        for key, value in env.iteritems():
-            penv[key] = str(value)
 
         proc = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, startupinfo=startupinfo, shell = False, env=penv)
+            stderr=subprocess.PIPE, startupinfo=startupinfo, shell = False)
         data, err = proc.communicate()
         rv = proc.wait()
         if data:
@@ -453,7 +31,7 @@ class Win32Spawn:
             return rv
         return 0
 
-def PrepareBuilding(env, root_directory, has_libcpu=False):
+def PrepareBuilding(env, root_directory, has_libcpu=False, remove_components = []):
     import SCons.cpp
     import rtconfig
 
@@ -465,11 +43,28 @@ def PrepareBuilding(env, root_directory, has_libcpu=False):
     Env = env
     Rtt_Root = root_directory
 
+    # add compability with Keil MDK 4.6 which changes the directory of armcc.exe
+    if rtconfig.PLATFORM == 'armcc':
+        if not os.path.isfile(os.path.join(rtconfig.EXEC_PATH, 'armcc.exe')):
+            if rtconfig.EXEC_PATH.find('bin40') > 0:
+                rtconfig.EXEC_PATH = rtconfig.EXEC_PATH.replace('bin40', 'armcc/bin')
+                Env['LINKFLAGS']=Env['LINKFLAGS'].replace('RV31', 'armcc')
+
+        # reset AR command flags 
+        env['ARCOM'] = '$AR --create $TARGET $SOURCES'
+        env['LIBPREFIX']   = ''
+        env['LIBSUFFIX']   = '_rvds.lib'
+
     # patch for win32 spawn
     if env['PLATFORM'] == 'win32' and rtconfig.PLATFORM == 'gcc':
         win32_spawn = Win32Spawn()
         win32_spawn.env = env
         env['SPAWN'] = win32_spawn.spawn
+    
+    if env['PLATFORM'] == 'win32':
+        os.environ['PATH'] = rtconfig.EXEC_PATH + ";" + os.environ['PATH']
+    else:
+        os.environ['PATH'] = rtconfig.EXEC_PATH + ":" + os.environ['PATH']
 
     # add program path
     env.PrependENVPath('PATH', rtconfig.EXEC_PATH)
@@ -482,6 +77,57 @@ def PrepareBuilding(env, root_directory, has_libcpu=False):
     PreProcessor.process_contents(contents)
     BuildOptions = PreProcessor.cpp_namespace
 
+    # add copy option 
+    AddOption('--copy',
+                      dest='copy',
+                      action='store_true',
+                      default=False,
+                      help='copy rt-thread directory to local.')
+    AddOption('--copy-header',
+                      dest='copy-header',
+                      action='store_true',
+                      default=False,
+                      help='copy header of rt-thread directory to local.')
+    AddOption('--cscope',
+                      dest='cscope',
+                      action='store_true',
+                      default=False,
+                      help='Build Cscope cross reference database. Requires cscope installed.')
+    AddOption('--clang-analyzer',
+                      dest='clang-analyzer',
+                      action='store_true',
+                      default=False,
+                      help='Perform static analyze with Clang-analyzer. '+\
+                           'Requires Clang installed.\n'+\
+                           'It is recommended to use with scan-build like this:\n'+\
+                           '`scan-build scons --clang-analyzer`\n'+\
+                           'If things goes well, scan-build will instruct you to invoke scan-view.')
+
+    if GetOption('clang-analyzer'):
+        # perform what scan-build does
+        env.Replace(
+                CC   = 'ccc-analyzer',
+                CXX  = 'c++-analyzer',
+                # skip as and link
+                LINK = 'true',
+                AS   = 'true',)
+        env["ENV"].update(x for x in os.environ.items() if x[0].startswith("CCC_"))
+        # only check, don't compile. ccc-analyzer use CCC_CC as the CC.
+        # fsyntax-only will give us some additional warning messages
+        env['ENV']['CCC_CC']  = 'clang'
+        env.Append(CFLAGS=['-fsyntax-only', '-Wall', '-Wno-invalid-source-encoding'])
+        env['ENV']['CCC_CXX'] = 'clang++'
+        env.Append(CXXFLAGS=['-fsyntax-only', '-Wall', '-Wno-invalid-source-encoding'])
+        # remove the POST_ACTION as it will cause meaningless errors(file not
+        # found or something like that).
+        rtconfig.POST_ACTION = ''
+
+    # add build library option
+    AddOption('--buildlib', 
+                      dest='buildlib', 
+                      type='string',
+                      help='building library of a component')
+
     # add target option
     AddOption('--target',
                       dest='target',
@@ -491,9 +137,18 @@ def PrepareBuilding(env, root_directory, has_libcpu=False):
     #{target_name:(CROSS_TOOL, PLATFORM)}
     tgt_dict = {'mdk':('keil', 'armcc'),
                 'mdk4':('keil', 'armcc'),
-                'iar':('iar', 'iar')}
+                'iar':('iar', 'iar'),
+                'vs':('msvc', 'cl'),
+                'vs2012':('msvc', 'cl'),
+                'cb':('keil', 'armcc')}
     tgt_name = GetOption('target')
     if tgt_name:
+        # --target will change the toolchain settings which clang-analyzer is
+        # depend on
+        if GetOption('clang-analyzer'):
+            print '--clang-analyzer cannot be used with --target'
+            sys.exit(1)
+
         SetOption('no_exec', 1)
         try:
             rtconfig.CROSS_TOOL, rtconfig.PLATFORM = tgt_dict[tgt_name]
@@ -505,20 +160,38 @@ def PrepareBuilding(env, root_directory, has_libcpu=False):
         and rtconfig.PLATFORM == 'gcc':
         AddDepend('RT_USING_MINILIBC')
 
-    #env['CCCOMSTR'] = "CC $TARGET"
-    #env['ASCOMSTR'] = "AS $TARGET"
-    #env['LINKCOMSTR'] = "Link $TARGET"
+    # add comstr option
+    AddOption('--verbose',
+                dest='verbose',
+                action='store_true',
+                default=False,
+                help='print verbose information during build')
+
+    if not GetOption('verbose'):
+        # override the default verbose command string
+        env.Replace(
+            ARCOMSTR = 'AR $TARGET',
+            ASCOMSTR = 'AS $TARGET',
+            ASPPCOMSTR = 'AS $TARGET',
+            CCCOMSTR = 'CC $TARGET',
+            CXXCOMSTR = 'CXX $TARGET',
+            LINKCOMSTR = 'LINK $TARGET'
+        )
 
     # board build script
-    objs = SConscript('SConscript', variant_dir='build/bsp', duplicate=0)
+    objs = SConscript('SConscript', variant_dir='build', duplicate=0)
     Repository(Rtt_Root)
     # include kernel
-    objs.append(SConscript('src/SConscript', variant_dir='build/src', duplicate=0))
+    objs.extend(SConscript(Rtt_Root + '/src/SConscript', variant_dir='build/src', duplicate=0))
     # include libcpu
     if not has_libcpu:
-        objs.append(SConscript('libcpu/SConscript', variant_dir='build/libcpu', duplicate=0))
+        objs.extend(SConscript(Rtt_Root + '/libcpu/SConscript', variant_dir='build/libcpu', duplicate=0))
+
     # include components
-    objs.append(SConscript(os.path.join(Rtt_Root, 'components/SConscript'), variant_dir='build/components', duplicate=0))
+    objs.extend(SConscript(Rtt_Root + '/components/SConscript',
+                           variant_dir='build/components',
+                           duplicate=0,
+                           exports='remove_components'))
 
     return objs
 
@@ -536,6 +209,13 @@ def PrepareModuleBuilding(env, root_directory):
 
     # add program path
     env.PrependENVPath('PATH', rtconfig.EXEC_PATH)
+
+def GetConfigValue(name):
+    assert type(name) == str, 'GetConfigValue: only string parameter is valid'
+    try:
+        return BuildOptions[name]
+    except:
+        return ''
 
 def GetDepend(depend):
     building = True
@@ -580,11 +260,16 @@ def MergeGroup(src_group, group):
             src_group['LINKFLAGS'] = src_group['LINKFLAGS'] + group['LINKFLAGS']
         else:
             src_group['LINKFLAGS'] = group['LINKFLAGS']
-    if group.has_key('LIBRARY'):
-        if src_group['LIBRARY'].has_key('LIBRARY'):
-            src_group['LIBRARY'] = src_group['LIBRARY'] + group['LIBRARY']
+    if group.has_key('LIBS'):
+        if src_group.has_key('LIBS'):
+            src_group['LIBS'] = src_group['LIBS'] + group['LIBS']
         else:
-            src_group['LIBRARY'] = group['LIBRARY']
+            src_group['LIBS'] = group['LIBS']
+    if group.has_key('LIBPATH'):
+        if src_group.has_key('LIBPATH'):
+            src_group['LIBPATH'] = src_group['LIBPATH'] + group['LIBPATH']
+        else:
+            src_group['LIBPATH'] = group['LIBPATH']
 
 def DefineGroup(name, src, depend, **parameters):
     global Env
@@ -593,6 +278,7 @@ def DefineGroup(name, src, depend, **parameters):
 
     group = parameters
     group['name'] = name
+    group['path'] = GetCurrentDir()
     if type(src) == type(['src1', 'str2']):
         group['src'] = File(src)
     else:
@@ -606,6 +292,10 @@ def DefineGroup(name, src, depend, **parameters):
         Env.Append(CPPDEFINES = group['CPPDEFINES'])
     if group.has_key('LINKFLAGS'):
         Env.Append(LINKFLAGS = group['LINKFLAGS'])
+    if group.has_key('LIBS'):
+        Env.Append(LIBS = group['LIBS'])
+    if group.has_key('LIBPATH'):
+        Env.Append(LIBPATH = group['LIBPATH'])
 
     objs = Env.Object(group['src'])
 
@@ -631,8 +321,43 @@ def GetCurrentDir():
     path = os.path.dirname(fn.abspath)
     return path
 
-def EndBuilding(target):
+PREBUILDING = []
+def RegisterPreBuildingAction(act):
+    global PREBUILDING
+    assert callable(act), 'Could only register callable objects. %s received' % repr(act)
+    PREBUILDING.append(act)
+
+def PreBuilding():
+    global PREBUILDING
+    for a in PREBUILDING:
+        a()
+
+def DoBuilding(target, objects):
+    program = None
+    # check whether special buildlib option
+    lib_name = GetOption('buildlib')
+    if lib_name:
+        # build library with special component
+        for Group in Projects:
+            if Group['name'] == lib_name:
+                objects = Env.Object(Group['src'])
+                program = Env.Library(lib_name, objects)
+                break
+    else:
+        program = Env.Program(target, objects)
+
+    EndBuilding(target, program)
+
+
+def EndBuilding(target, program = None):
     import rtconfig
+    from keil import MDKProject
+    from keil import MDK4Project
+    from iar import IARProject
+    from vs import VSProject
+    from vs2012 import VS2012Project
+    from codeblocks import CBProject
+
     Env.AddPostAction(target, rtconfig.POST_ACTION)
 
     if GetOption('target') == 'mdk':
@@ -652,16 +377,34 @@ def EndBuilding(target):
     if GetOption('target') == 'iar':
         IARProject('project.ewp', Projects) 
 
-def SrcRemove(src, remove):
-	if type(src[0]) == type('str'):
-		for item in src:
-			if os.path.basename(item) in remove:
-				src.remove(item)
-		return
+    if GetOption('target') == 'vs':
+        VSProject('project.vcproj', Projects, program)
 
-	for item in src:
-		if os.path.basename(item.rstr()) in remove:
-			src.remove(item)
+    if GetOption('target') == 'vs2012':
+        VS2012Project('project.vcxproj', Projects, program)
+
+    if GetOption('target') == 'cb':
+        CBProject('project.cbp', Projects, program)
+
+    if GetOption('copy') and program != None:
+        MakeCopy(program)
+    if GetOption('copy-header') and program != None:
+        MakeCopyHeader(program)
+
+    if GetOption('cscope'):
+        from cscope import CscopeDatabase
+        CscopeDatabase(Projects)
+
+def SrcRemove(src, remove):
+    if type(src[0]) == type('str'):
+        for item in src:
+            if os.path.basename(item) in remove:
+                src.remove(item)
+        return
+
+    for item in src:
+        if os.path.basename(item.rstr()) in remove:
+            src.remove(item)
 
 def GetVersion():
     import SCons.cpp
@@ -685,3 +428,177 @@ def GetVersion():
         return '%d.%d.%d' % (version, subversion, revision)
 
     return '0.%d.%d' % (version, subversion)
+
+def GlobSubDir(sub_dir, ext_name):
+    import os
+    import glob
+
+    def glob_source(sub_dir, ext_name):
+        list = os.listdir(sub_dir)
+        src = glob.glob(os.path.join(sub_dir, ext_name))
+
+        for item in list:
+            full_subdir = os.path.join(sub_dir, item)
+            if os.path.isdir(full_subdir):
+                src += glob_source(full_subdir, ext_name)
+        return src
+
+    dst = []
+    src = glob_source(sub_dir, ext_name)
+    for item in src:
+        dst.append(os.path.relpath(item, sub_dir))
+    return dst
+
+def do_copy_file(src, dst):
+    import shutil
+    # check source file 
+    if not os.path.exists(src):
+        return 
+
+    path = os.path.dirname(dst)
+    # mkdir if path not exist
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    shutil.copy2(src, dst)
+
+def do_copy_folder(src_dir, dst_dir):
+    import shutil
+    # check source directory 
+    if not os.path.exists(src_dir):
+        return
+    
+    if os.path.exists(dst_dir):
+        shutil.rmtree(dst_dir)
+    
+    shutil.copytree(src_dir, dst_dir)
+
+source_ext = ["c", "h", "s", "S", "cpp", "xpm"]
+source_list = []
+
+def walk_children(child):
+    global source_list
+    global source_ext
+
+    # print child
+    full_path = child.rfile().abspath
+    file_type  = full_path.rsplit('.',1)[1]
+    #print file_type
+    if file_type in source_ext:
+        if full_path not in source_list:
+            source_list.append(full_path)
+
+    children = child.all_children()
+    if children != []:
+        for item in children:
+            walk_children(item)
+
+def MakeCopy(program):
+    global source_list
+    global Rtt_Root
+    global Env
+    
+    target_path = os.path.join(Dir('#').abspath, 'rt-thread')
+    
+    if Env['PLATFORM'] == 'win32':
+        RTT_ROOT = Rtt_Root.lower()
+    else:
+        RTT_ROOT = Rtt_Root
+    
+    if target_path.startswith(RTT_ROOT):
+        return
+
+    for item in program:
+        walk_children(item)
+    
+    source_list.sort()
+    
+    # filte source file in RT-Thread
+    target_list = []
+    for src in source_list:
+        if Env['PLATFORM'] == 'win32':
+            src = src.lower()
+
+        if src.startswith(RTT_ROOT):
+            target_list.append(src)
+
+    source_list = target_list
+    # get source path 
+    src_dir = []
+    for src in source_list:
+        src = src.replace(RTT_ROOT, '')
+        if src[0] == os.sep or src[0] == '/':
+            src = src[1:]
+
+        path = os.path.dirname(src)
+        sub_path = path.split(os.sep)
+        full_path = RTT_ROOT
+        for item in sub_path:
+            full_path = os.path.join(full_path, item)
+            if full_path not in src_dir: 
+                src_dir.append(full_path)
+
+    for item in src_dir: 
+        source_list.append(os.path.join(item, 'SConscript'))
+
+    for src in source_list:
+        dst = src.replace(RTT_ROOT, '')
+        if dst[0] == os.sep or dst[0] == '/':
+            dst = dst[1:]
+        print '=> ', dst
+        dst = os.path.join(target_path, dst)
+        do_copy_file(src, dst)
+
+    # copy tools directory 
+    print "=>  tools"
+    do_copy_folder(os.path.join(RTT_ROOT, "tools"), os.path.join(target_path, "tools"))
+    do_copy_file(os.path.join(RTT_ROOT, 'AUTHORS'), os.path.join(target_path, 'AUTHORS'))
+    do_copy_file(os.path.join(RTT_ROOT, 'COPYING'), os.path.join(target_path, 'COPYING'))
+
+def MakeCopyHeader(program):
+    global source_ext
+    source_ext = []
+    source_ext = ["h", "xpm"]
+    global source_list
+    global Rtt_Root
+    global Env
+
+    target_path = os.path.join(Dir('#').abspath, 'rt-thread')
+
+    if Env['PLATFORM'] == 'win32':
+        RTT_ROOT = Rtt_Root.lower()
+    else:
+        RTT_ROOT = Rtt_Root
+
+    if target_path.startswith(RTT_ROOT):
+        return
+
+    for item in program:
+        walk_children(item)
+
+    source_list.sort()
+
+    # filte source file in RT-Thread
+    target_list = []
+    for src in source_list:
+        if Env['PLATFORM'] == 'win32':
+            src = src.lower()
+
+        if src.startswith(RTT_ROOT):
+            target_list.append(src)
+
+    source_list = target_list
+
+    for src in source_list:
+        dst = src.replace(RTT_ROOT, '')
+        if dst[0] == os.sep or dst[0] == '/':
+            dst = dst[1:]
+        print '=> ', dst
+        dst = os.path.join(target_path, dst)
+        do_copy_file(src, dst)
+
+    # copy tools directory 
+    print "=>  tools"
+    do_copy_folder(os.path.join(RTT_ROOT, "tools"), os.path.join(target_path, "tools"))
+    do_copy_file(os.path.join(RTT_ROOT, 'AUTHORS'), os.path.join(target_path, 'AUTHORS'))
+    do_copy_file(os.path.join(RTT_ROOT, 'COPYING'), os.path.join(target_path, 'COPYING'))

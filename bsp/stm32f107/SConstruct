@@ -2,7 +2,11 @@ import os
 import sys
 import rtconfig
 
-RTT_ROOT = os.path.normpath(os.getcwd() + '/../..')
+if os.getenv('RTT_ROOT'):
+    RTT_ROOT = os.getenv('RTT_ROOT')
+else:
+    RTT_ROOT = os.path.normpath(os.getcwd() + '/../..')
+
 sys.path = sys.path + [os.path.join(RTT_ROOT, 'tools')]
 from building import *
 
@@ -25,12 +29,4 @@ Export('rtconfig')
 
 # prepare building environment
 objs = PrepareBuilding(env, RTT_ROOT)
-
-# STM32 firemare library building script
-objs = objs + SConscript('Libraries/SConscript', variant_dir='build/bsp/Libraries', duplicate=0)
-
-# build program 
-env.Program(TARGET, objs)
-
-# end building 
-EndBuilding(TARGET)
+DoBuilding(TARGET, objs)

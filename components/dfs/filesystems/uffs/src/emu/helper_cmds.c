@@ -37,8 +37,9 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include <stdlib.h>
-#include "uffs/uffs_config.h"
+#include "uffs_config.h"
 #include "uffs/uffs_public.h"
 #include "uffs/uffs_fs.h"
 #include "uffs/uffs_utils.h"
@@ -47,86 +48,92 @@
 #include "uffs/uffs_find.h"
 #include "cmdline.h"
 #include "uffs/uffs_fd.h"
+#include "uffs/uffs_mtb.h"
+#include "uffs_fileem.h"
 
-#define PFX "cmd: "
-
+#define PFX "cmd : "
 
 #define MAX_PATH_LENGTH 128
 
+#define MSGLN(msg,...) uffs_Perror(UFFS_MSG_NORMAL, msg, ## __VA_ARGS__)
+#define MSG(msg,...) uffs_PerrorRaw(UFFS_MSG_NORMAL, msg, ## __VA_ARGS__)
 
-BOOL cmdFormat(const char *tail)
+/** format [<mount>] */
+static int cmd_format(int argc, char *argv[])
 {
 	URET ret;
 	const char *mount = "/";
 	uffs_Device *dev;
+	UBOOL force = U_FALSE;
 
-	if (tail) {
-		mount = cli_getparam(tail, NULL);
+	if (argc > 1) {
+		mount = argv[1];
+		if (argc > 2 && strcmp(argv[2], "-f") == 0)
+			force = U_TRUE;
 	}
-	uffs_Perror(UFFS_ERR_NORMAL, "Formating %s ... ", mount);
+	MSGLN("Formating %s ... ", mount);
 
 	dev = uffs_GetDeviceFromMountPoint(mount);
 	if (dev == NULL) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't get device from mount point.");
+		MSGLN("Can't get device from mount point.");
+		return -1;
 	}
 	else {
-		if (dev->ref_count == 1) {
-			ret = uffs_FormatDevice(dev);
-			if (ret != U_SUCC) {
-				uffs_Perror(UFFS_ERR_NORMAL, "Format fail.");
-			}
-			else {
-				uffs_Perror(UFFS_ERR_NORMAL, "Format succ.");
-			}
+		ret = uffs_FormatDevice(dev, force);
+		if (ret != U_SUCC) {
+			MSGLN("Format fail.");
+			return -1;
 		}
 		else {
-			uffs_Perror(UFFS_ERR_NORMAL, "dev->ref_count: %d, can't format this device.", dev->ref_count);
+			MSGLN("Format succ.");
 		}
 		uffs_PutDevice(dev);
 	}
-	return TRUE;	
+
+	return 0;
 }
 
-BOOL cmdMkf(const char *tail)
+/** mkf <file> */
+static int cmd_mkf(int argc, char *argv[])
 {
 	int fd;
 	const char *name;
 	int oflags = UO_RDWR | UO_CREATE;
 
-	if (tail == NULL) {
-		return FALSE;
-	}
+	CHK_ARGC(2, 2);
 
-	name = cli_getparam(tail, NULL);
+	name = argv[1];
 	fd = uffs_open(name, oflags);
 	if (fd < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Create %s fail, err: %d", name, uffs_get_error());
+		MSGLN("Create %s fail, err: %d", name, uffs_get_error());
+		return -1;
 	}
 	else {
-		uffs_Perror(UFFS_ERR_NORMAL, "Create %s succ.", name);
+		MSGLN("Create %s succ.", name);
 		uffs_close(fd);
 	}
 	
-	return TRUE;
+	return 0;
 }
 
-BOOL cmdMkdir(const char *tail)
+/** mkdir <dir> */
+static int cmd_mkdir(int argc, char *argv[])
 {
 	const char *name;
 
-	if (tail == NULL) {
-		return FALSE;
-	}
+	CHK_ARGC(2, 0);
 
-	name = cli_getparam(tail, NULL);
+	name = argv[1];
 	
 	if (uffs_mkdir(name) < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Create %s fail, err: %d", name, uffs_get_error());
+		MSGLN("Create %s fail, err: %d", name, uffs_get_error());
+		return -1;
 	}
 	else {
-		uffs_Perror(UFFS_ERR_NORMAL, "Create %s succ.", name);
-	}	
-	return TRUE;
+		MSGLN("Create %s succ.", name);
+	}
+
+	return 0;
 }
 
 
@@ -144,42 +151,45 @@ static int CountObjectUnder(const char *dir)
 	return count;
 }
 
-BOOL cmdPwd(const char *tail)
+static int cmd_pwd(int argc, char *argv[])
 {
-	uffs_Perror(UFFS_ERR_NORMAL, "not supported.");
-	return TRUE;
+	MSGLN("not supported.");
+	return 0;
 }
 
-BOOL cmdCd(const char *tail)
+static int cmd_cd(int argc, char *argv[])
 {
-	uffs_Perror(UFFS_ERR_NORMAL, "Not supported");
-	return TRUE;
+	MSGLN("Not supported");
+	return 0;
 }
 
-BOOL cmdLs(const char *tail)
+/** ls [<dir>] */
+static int cmd_ls(int argc, char *argv[])
 {
 	uffs_DIR *dirp;
 	struct uffs_dirent *ent;
 	struct uffs_stat stat_buf;
 	int count = 0;
 	char buf[MAX_PATH_LENGTH+2];
-	char *name = (char *)tail;
+	const char *name = "/";
 	char *sub;
+	int ret = 0;
 
-	if (name == NULL) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Must provide file/dir name.");
-		return FALSE;
-	}
+	CHK_ARGC(1, 2);
+
+	if (argc > 1)
+		name = argv[1];
 
 	dirp = uffs_opendir(name);
 	if (dirp == NULL) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't open '%s' for list", name);
+		MSGLN("Can't open '%s' for list", name);
+		ret = -1;
 	}
 	else {
-		uffs_PerrorRaw(UFFS_ERR_NORMAL, "------name-----------size---------serial-----" TENDSTR);
+		MSG("------name-----------size---------serial-----" TENDSTR);
 		ent = uffs_readdir(dirp);
 		while (ent) {
-			uffs_PerrorRaw(UFFS_ERR_NORMAL, "%9s", ent->d_name);
+			MSG("%9s", ent->d_name);
 			strcpy(buf, name);
 			sub = buf;
 			if (name[strlen(name)-1] != '/')
@@ -187,39 +197,40 @@ BOOL cmdLs(const char *tail)
 			sub = strcat(sub, ent->d_name);
 			if (ent->d_type & FILE_ATTR_DIR) {
 				sub = strcat(sub, "/");
-				uffs_PerrorRaw(UFFS_ERR_NORMAL, "/  \t<%8d>", CountObjectUnder(sub));
+				MSG("/  \t<%8d>", CountObjectUnder(sub));
 			}
 			else {
 				uffs_stat(sub, &stat_buf);
-				uffs_PerrorRaw(UFFS_ERR_NORMAL, "   \t %8d ", stat_buf.st_size);
+				MSG("   \t %8d ", stat_buf.st_size);
 			}
-			uffs_PerrorRaw(UFFS_ERR_NORMAL, "\t%6d" TENDSTR, ent->d_ino);
+			MSG("\t%6d" TENDSTR, ent->d_ino);
 			count++;
 			ent = uffs_readdir(dirp);
 		}
 		
 		uffs_closedir(dirp);
 
-		uffs_PerrorRaw(UFFS_ERR_NORMAL, "Total: %d objects." TENDSTR, count);
+		MSG("Total: %d objects." TENDSTR, count);
 	}
 
-	return TRUE;
+	return ret;
 }
 
-
-BOOL cmdRm(const char *tail)
+/** rm <obj> */
+static int cmd_rm(int argc, char *argv[])
 {
 	const char *name = NULL;
 	int ret = 0;
 	struct uffs_stat st;
 
-	if (tail == NULL) return FALSE;
+	CHK_ARGC(2, 2);
 
-	name = cli_getparam(tail, NULL);
+	name = argv[1];
 
-	if (uffs_stat(name, &st) < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't stat '%s'", name);
-		return TRUE;
+	ret = uffs_stat(name, &st);
+	if (ret < 0) {
+		MSGLN("Can't stat '%s'", name);
+		return ret;
 	}
 
 	if (st.st_mode & US_IFDIR) {
@@ -230,101 +241,150 @@ BOOL cmdRm(const char *tail)
 	}
 
 	if (ret == 0)
-		uffs_Perror(UFFS_ERR_NORMAL, "Delete '%s' succ.", name);
+		MSGLN("Delete '%s' succ.", name);
 	else
-		uffs_Perror(UFFS_ERR_NORMAL, "Delete '%s' fail!", name);
+		MSGLN("Delete '%s' fail!", name);
 
-	return TRUE;
+	return ret;
 }
 
-BOOL cmdRen(const char *tail)
+/** ren|mv <old> <new> */
+static int cmd_ren(int argc, char *argv[])
 {
 	const char *oldname;
 	const char *newname;
+	int ret;
 
-	if (tail == NULL) 
-		return FALSE;
-	oldname = cli_getparam(tail, &newname);
-	if (newname == NULL)
-		return FALSE;
+	CHK_ARGC(3, 3);
 
-	if (uffs_rename(oldname, newname) == 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Rename from '%s' to '%s' succ.", oldname, newname);
+	oldname = argv[1];
+	newname = argv[2];
+
+	if ((ret = uffs_rename(oldname, newname)) == 0) {
+		MSGLN("Rename from '%s' to '%s' succ.", oldname, newname);
 	}
 	else {
-		uffs_Perror(UFFS_ERR_NORMAL, "Rename from '%s' to '%s' fail!", oldname, newname);
+		MSGLN("Rename from '%s' to '%s' fail!", oldname, newname);
 	}
-	return TRUE;
+
+	return ret;
 }
 
-BOOL cmdSt(const char *tail)
+static void dump_msg_to_stdout(struct uffs_DeviceSt *dev, const char *fmt, ...)
+{
+	uffs_FileEmu *emu = (uffs_FileEmu *)(dev->attr->_private);
+	va_list args;
+
+	va_start(args, fmt);
+	//vprintf(fmt, args);
+	if (emu && emu->dump_fp)
+		vfprintf(emu->dump_fp, fmt, args);
+	va_end(args);
+}
+
+/** dump [<mount>] */
+static int cmd_dump(int argc, char *argv[])
+{
+	uffs_Device *dev;
+	uffs_FileEmu *emu;
+	const char *mount = "/";
+	const char *dump_file = "dump.txt";
+
+	if (argc > 1) {
+		mount = argv[1];
+		if (argc > 2)
+			dump_file = argv[2];
+	}
+
+	dev = uffs_GetDeviceFromMountPoint(mount);
+	if (dev == NULL) {
+		MSGLN("Can't get device from mount point %s", mount);
+		return -1;
+	}
+
+	emu = (uffs_FileEmu *)(dev->attr->_private);
+	emu->dump_fp = fopen(dump_file, "w");
+
+	uffs_DumpDevice(dev, dump_msg_to_stdout);
+
+	if (emu->dump_fp)
+		fclose(emu->dump_fp);
+
+	uffs_PutDevice(dev);
+
+	return 0;
+}
+
+/** st [<mount>] */
+static int cmd_st(int argc, char *argv[])
 {
 	uffs_Device *dev;
 	const char *mount = "/";
 	uffs_FlashStat *s;
 	TreeNode *node;
 
-	if (tail) {
-		mount = cli_getparam(tail, NULL);
+	if (argc > 1) {
+		mount = argv[1];
 	}
 
 	dev = uffs_GetDeviceFromMountPoint(mount);
 	if (dev == NULL) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't get device from mount point %s", mount);
-		return TRUE;
+		MSGLN("Can't get device from mount point %s", mount);
+		return -1;
 	}
 
 	s = &(dev->st);
 
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "----------- basic info -----------" TENDSTR);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "TreeNode size:         %d" TENDSTR, sizeof(TreeNode));
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "TagStore size:         %d" TENDSTR, sizeof(struct uffs_TagStoreSt));
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "MaxCachedBlockInfo:    %d" TENDSTR, MAX_CACHED_BLOCK_INFO);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "MaxPageBuffers:        %d" TENDSTR, MAX_PAGE_BUFFERS);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "MaxDirtyPagesPerBlock: %d" TENDSTR, MAX_DIRTY_PAGES_IN_A_BLOCK);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "MaxPathLength:         %d" TENDSTR, MAX_PATH_LENGTH);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "MaxObjectHandles:      %d" TENDSTR, MAX_OBJECT_HANDLE);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "FreeObjectHandles:     %d" TENDSTR, uffs_PoolGetFreeCount(uffs_GetObjectPool()));
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "MaxDirHandles:         %d" TENDSTR, MAX_DIR_HANDLE);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "FreeDirHandles:        %d" TENDSTR, uffs_PoolGetFreeCount(uffs_GetDirEntryBufPool()));
+	MSG("----------- basic info -----------" TENDSTR);
+	MSG("TreeNode size:         %d" TENDSTR, sizeof(TreeNode));
+	MSG("TagStore size:         %d" TENDSTR, sizeof(struct uffs_TagStoreSt));
+	MSG("MaxCachedBlockInfo:    %d" TENDSTR, dev->cfg.bc_caches);
+	MSG("MaxPageBuffers:        %d" TENDSTR, dev->cfg.page_buffers);
+	MSG("MaxDirtyPagesPerBlock: %d" TENDSTR, dev->cfg.dirty_pages);
+	MSG("MaxPathLength:         %d" TENDSTR, MAX_PATH_LENGTH);
+	MSG("MaxObjectHandles:      %d" TENDSTR, MAX_OBJECT_HANDLE);
+	MSG("FreeObjectHandles:     %d" TENDSTR, uffs_GetFreeObjectHandlers());
+	MSG("MaxDirHandles:         %d" TENDSTR, MAX_DIR_HANDLE);
+	MSG("FreeDirHandles:        %d" TENDSTR, uffs_PoolGetFreeCount(uffs_DirEntryBufGetPool()));
 
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "----------- statistics for '%s' -----------" TENDSTR, mount);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Block Erased:          %d" TENDSTR, s->block_erase_count);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Write Page:            %d" TENDSTR, s->page_write_count);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Write Spare:           %d" TENDSTR, s->spare_write_count);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Read Page:             %d" TENDSTR, s->page_read_count - s->page_header_read_count);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Read Header:           %d" TENDSTR, s->page_header_read_count);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Read Spare:            %d" TENDSTR, s->spare_read_count);
+	MSG("----------- statistics for '%s' -----------" TENDSTR, mount);
+	MSG("Device Ref:            %d" TENDSTR, dev->ref_count);
+	MSG("Block Erased:          %d" TENDSTR, s->block_erase_count);
+	MSG("Write Page:            %d" TENDSTR, s->page_write_count);
+	MSG("Write Spare:           %d" TENDSTR, s->spare_write_count);
+	MSG("Read Page:             %d" TENDSTR, s->page_read_count - s->page_header_read_count);
+	MSG("Read Header:           %d" TENDSTR, s->page_header_read_count);
+	MSG("Read Spare:            %d" TENDSTR, s->spare_read_count);
+	MSG("I/O Read:              %lu" TENDSTR, s->io_read);
+	MSG("I/O Write:             %lu" TENDSTR, s->io_write);
 
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "--------- partition info for '%s' ---------" TENDSTR, mount);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Space total:           %d" TENDSTR, uffs_GetDeviceTotal(dev));
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Space used:            %d" TENDSTR, uffs_GetDeviceUsed(dev));
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Space free:            %d" TENDSTR, uffs_GetDeviceFree(dev));
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Page Size:             %d" TENDSTR, dev->attr->page_data_size);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Spare Size:            %d" TENDSTR, dev->attr->spare_size);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Pages Per Block:       %d" TENDSTR, dev->attr->pages_per_block);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Block size:            %d" TENDSTR, dev->attr->page_data_size * dev->attr->pages_per_block);
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, "Total blocks:          %d of %d" TENDSTR, (dev->par.end - dev->par.start + 1), dev->attr->total_blocks);
+	MSG("--------- partition info for '%s' ---------" TENDSTR, mount);
+	MSG("Space total:           %d" TENDSTR, uffs_GetDeviceTotal(dev));
+	MSG("Space used:            %d" TENDSTR, uffs_GetDeviceUsed(dev));
+	MSG("Space free:            %d" TENDSTR, uffs_GetDeviceFree(dev));
+	MSG("Page Size:             %d" TENDSTR, dev->attr->page_data_size);
+	MSG("Spare Size:            %d" TENDSTR, dev->attr->spare_size);
+	MSG("Pages Per Block:       %d" TENDSTR, dev->attr->pages_per_block);
+	MSG("Block size:            %d" TENDSTR, dev->attr->page_data_size * dev->attr->pages_per_block);
+	MSG("Total blocks:          %d of %d" TENDSTR, (dev->par.end - dev->par.start + 1), dev->attr->total_blocks);
 	if (dev->tree.bad) {
-		uffs_PerrorRaw(UFFS_ERR_NORMAL, "Bad blocks: ");
+		MSG("Bad blocks: ");
 		node = dev->tree.bad;
 		while(node) {
-			uffs_PerrorRaw(UFFS_ERR_NORMAL, "%d, ", node->u.list.block);
+			MSG("%d, ", node->u.list.block);
 			node = node->u.list.next;
 		}
-		uffs_PerrorRaw(UFFS_ERR_NORMAL, TENDSTR);
+		MSG(TENDSTR);
 	}
-
-	uffs_BufInspect(dev);
 
 	uffs_PutDevice(dev);
 
-	return TRUE;
+	return 0;
 
 }
 
-
-BOOL cmdCp(const char *tail)
+/** cp <src> <des> */
+static int cmd_cp(int argc, char *argv[])
 {
 	const char *src;
 	const char *des;
@@ -333,14 +393,12 @@ BOOL cmdCp(const char *tail)
 	int len;
 	BOOL src_local = FALSE, des_local = FALSE;
 	FILE *fp1 = NULL, *fp2 = NULL;
+	int ret = -1;
 
-	if (!tail) 
-		return FALSE;
+	CHK_ARGC(3, 3);
 
-	src = cli_getparam(tail, &des);
-
-	if (!des)
-		return FALSE;
+	src = argv[1];
+	des = argv[2];
 
 	if (memcmp(src, "::", 2) == 0) {
 		src += 2;
@@ -353,55 +411,60 @@ BOOL cmdCp(const char *tail)
 	
 	if (src_local) {
 		if ((fp1 = fopen(src, "rb")) == NULL) {
-			uffs_Perror(UFFS_ERR_NORMAL, "Can't open %s for copy.", src);
+			MSGLN("Can't open %s for copy.", src);
 			goto fail_ext;
 		}
 	}
 	else {
 		if ((fd1 = uffs_open(src, UO_RDONLY)) < 0) {
-			uffs_Perror(UFFS_ERR_NORMAL, "Can't open %s for copy.", src);
+			MSGLN("Can't open %s for copy.", src);
 			goto fail_ext;
 		}
 	}
 
 	if (des_local) {
 		if ((fp2 = fopen(des, "wb")) == NULL) {
-			uffs_Perror(UFFS_ERR_NORMAL, "Can't open %s for copy.", des);
+			MSGLN("Can't open %s for copy.", des);
 			goto fail_ext;
 		}
 	}
 	else {
 		if ((fd2 = uffs_open(des, UO_RDWR|UO_CREATE|UO_TRUNC)) < 0) {
-			uffs_Perror(UFFS_ERR_NORMAL, "Can't open %s for copy.", des);
+			MSGLN("Can't open %s for copy.", des);
 			goto fail_ext;
 		}
 	}
 
+	ret = 0;
 	while (	(src_local ? (feof(fp1) == 0) : (uffs_eof(fd1) == 0)) ) {
+		ret = -1;
 		if (src_local) {
 			len = fread(buf, 1, sizeof(buf), fp1);
 		}
 		else {
 			len = uffs_read(fd1, buf, sizeof(buf));
 		}
-		if (len == 0) 
+		if (len == 0) {
+			ret = -1;
 			break;
+		}
 		if (len < 0) {
-			uffs_Perror(UFFS_ERR_NORMAL, "read file %s fail ?", src);
+			MSGLN("read file %s fail ?", src);
 			break;
 		}
 		if (des_local) {
 			if ((int)fwrite(buf, 1, len, fp2) != len) {
-				uffs_Perror(UFFS_ERR_NORMAL, "write file %s fail ? ", des);
+				MSGLN("write file %s fail ? ", des);
 				break;
 			}
 		}
 		else {
 			if (uffs_write(fd2, buf, len) != len) {
-				uffs_Perror(UFFS_ERR_NORMAL, "write file %s fail ? ", des);
+				MSGLN("write file %s fail ? ", des);
 				break;
 			}
 		}
+		ret = 0;
 	}
 
 fail_ext:
@@ -414,30 +477,30 @@ fail_ext:
 	if (fp2)
 		fclose(fp2);
 
-	return TRUE;
+	return ret;
 }
 
-BOOL cmdCat(const char *tail)
+/** cat <file> [<offset>] [<size>] */
+static int cmd_cat(int argc, char *argv[])
 {
 	int fd;
-	const char *name;
-	const char *next;
+	const char *name = NULL;
 	char buf[100];
 	int start = 0, size = 0, printed = 0, n, len;
+	int ret = -1;
 
-	if (!tail) 
-		return FALSE;
+	CHK_ARGC(2, 4);
 
-	name = cli_getparam(tail, &next);
+	name = argv[1];
 
 	if ((fd = uffs_open(name, UO_RDONLY)) < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't open %s", name);
+		MSGLN("Can't open %s", name);
 		goto fail;
 	}
 
-	if (next) {
-		start = strtol(next, (char **) &next, 10);
-		if (next) size = strtol(next, NULL, 10);
+	if (argc > 2) {
+		start = strtol(argv[2], NULL, 10);
+		if (argc > 3) size = strtol(argv[3], NULL, 10);
 	}
 
 	if (start >= 0)
@@ -453,7 +516,7 @@ BOOL cmdCat(const char *tail)
 			if (size == 0 || printed < size) {
 				n = (size == 0 ? len : (size - printed > len ? len : size - printed));
 				buf[n] = 0;
-				uffs_PerrorRaw(UFFS_ERR_NORMAL, "%s", buf);
+				MSG("%s", buf);
 				printed += n;
 			}
 			else {
@@ -461,394 +524,171 @@ BOOL cmdCat(const char *tail)
 			}
 		}
 	}
-	uffs_PerrorRaw(UFFS_ERR_NORMAL, TENDSTR);
+	MSG(TENDSTR);
 	uffs_close(fd);
 
+	ret = 0;
 fail:
 
-	return TRUE;
-}
-
-
-static URET test_verify_file(const char *file_name)
-{
-	int fd;
-	int ret = U_FAIL;
-	unsigned char buf[100];
-	int i, pos, len;
-
-	if ((fd = uffs_open(file_name, UO_RDONLY)) < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't open file %s for read.", file_name);
-		goto test_exit;
-	}
-
-	pos = 0;
-	while (!uffs_eof(fd)) {
-		len = uffs_read(fd, buf, sizeof(buf));
-		if (len <= 0)
-			goto test_failed;
-		for (i = 0; i < len; i++) {
-			if (buf[i] != (pos++ & 0xFF)) {
-				pos--;
-				uffs_Perror(UFFS_ERR_NORMAL, "Verify file %s failed at: %d, expect %x but got %x", file_name, pos, pos & 0xFF, buf[i]);
-				goto test_failed;
-			}
-		}
-	}
-
-	if (pos != uffs_seek(fd, 0, USEEK_END)) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Verify file %s failed. invalid file length.", file_name);
-		goto test_failed;
-	}
-
-	uffs_Perror(UFFS_ERR_NORMAL, "Verify file %s succ.", file_name);
-	ret = U_SUCC;
-
-test_failed:
-	uffs_close(fd);
-
-test_exit:
-
 	return ret;
 }
 
-static URET do_write_test_file(int fd, int size)
+/** mount partition or show mounted partitions
+ *		mount [<mount>]
+ */
+static int cmd_mount(int argc, char *argv[])
 {
-	long pos;
-	unsigned char buf[100];
-	unsigned char data;
-	int i, len;
+	uffs_MountTable *tab;
+	const char *mount = NULL;
 
-	while (size > 0) {
-		pos = uffs_seek(fd, 0, USEEK_CUR);
-		len = (size > sizeof(buf) ? sizeof(buf) : size);
-		data = pos & 0xFF;
-		for (i = 0; i < len; i++, data++) {
-			buf[i] = data;
-		}
-		if (uffs_write(fd, buf, len) != len) {
-			uffs_Perror(UFFS_ERR_NORMAL, "Write file failed, size %d at %d", len, pos);
-			return U_FAIL;
-		}
-		size -= len;
-	}
-
-	return U_SUCC;
-}
-
-static URET test_append_file(const char *file_name, int size)
-{
-	int ret = U_FAIL;
-	int fd = -1;
-
-	if ((fd = uffs_open(file_name, UO_RDWR|UO_APPEND|UO_CREATE)) < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't open file %s for append.", file_name);
-		goto test_exit;
-	}
-
-	uffs_seek(fd, 0, USEEK_END);
-
-	if (do_write_test_file(fd, size) == U_FAIL) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Write file %s failed.", file_name);
-		goto test_failed;
-	}
-	ret = U_SUCC;
-
-test_failed:
-	uffs_close(fd);
-
-test_exit:
-
-	return ret;
-}
-
-static URET test_write_file(const char *file_name, int pos, int size)
-{
-	int ret = U_FAIL;
-	int fd = -1;
-
-	if ((fd = uffs_open(file_name, UO_RDWR|UO_CREATE)) < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't open file %s for write.", file_name);
-		goto test_exit;
-	}
-
-	if (uffs_seek(fd, pos, USEEK_SET) != pos) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't seek file %s at pos %d", file_name, pos);
-		goto test_failed;
-	}
-
-	if (do_write_test_file(fd, size) == U_FAIL) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Write file %s failed.", file_name);
-		goto test_failed;
-	}
-	ret = U_SUCC;
-
-test_failed:
-	uffs_close(fd);
-
-test_exit:
-
-	return ret;
-}
-
-
-static URET DoTest2(void)
-{
-	int fd = -1;
-	URET ret = U_FAIL;
-	char buf[100], buf_1[100];
-
-	fd = uffs_open("/abc/", UO_RDWR|UO_DIR);
-	if (fd < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't open dir abc, err: %d", uffs_get_error());
-		uffs_Perror(UFFS_ERR_NORMAL, "Try to create a new one...");
-		fd = uffs_open("/abc/", UO_RDWR|UO_CREATE|UO_DIR);
-		if (fd < 0) {
-			uffs_Perror(UFFS_ERR_NORMAL, "Can't create new dir /abc/");
-			goto exit_test;
-		}
-		else {
-			uffs_close(fd);
+	if (argc == 1) {
+		tab = uffs_MtbGetMounted();
+		while (tab) {
+			MSG(" %s : (%d) ~ (%d)\n", tab->mount, tab->start_block, tab->end_block);
+			tab = tab->next;
 		}
 	}
 	else {
-		uffs_close(fd);
+		mount = argv[1];
+		if (uffs_Mount(mount) < 0) {
+			MSGLN("Can't mount %s", mount);
+			return -1;
+		}
 	}
-	
-	fd = uffs_open("/abc/test.txt", UO_RDWR|UO_CREATE);
-	if (fd < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't open /abc/test.txt");
-		goto exit_test;
-	}
+	return 0;
+}
 
-	sprintf(buf, "123456789ABCDEF");
-	ret = uffs_write(fd, buf, strlen(buf));
-	uffs_Perror(UFFS_ERR_NORMAL, "write %d bytes to file, content: %s", ret, buf);
+/** unmount parition or show unmounted partitions
+ *		umount [<mount>]
+ */
+static int cmd_unmount(int argc, char *argv[])
+{
+	uffs_MountTable *tab;
+	const char *mount = NULL;
 
-	ret = uffs_seek(fd, 3, USEEK_SET);
-	uffs_Perror(UFFS_ERR_NORMAL, "new file position: %d", ret);
-
-	memset(buf_1, 0, sizeof(buf_1));
-	ret = uffs_read(fd, buf_1, 5);
-	uffs_Perror(UFFS_ERR_NORMAL, "read %d bytes, content: %s", ret, buf_1);
-
-	if (memcmp(buf + 3, buf_1, 5) != 0) {
-		ret = U_FAIL;
+	if (argc == 1) {
+		tab = uffs_MtbGetUnMounted();
+		while (tab) {
+			MSG(" %s : (%d) ~ (%d)\n", tab->mount, tab->start_block, tab->end_block);
+			tab = tab->next;
+		}
 	}
 	else {
-		ret = U_SUCC;
-	}
-
-	uffs_close(fd);
-
-exit_test:
-
-	return ret;
-}
-
-/* test create file, write file and read back */
-BOOL cmdTest1(const char *tail)
-{
-	int fd;
-	URET ret;
-	char buf[100];
-	const char *name;
-
-	if (!tail) {
-		return FALSE;
-	}
-
-	name = cli_getparam(tail, NULL);
-
-	fd = uffs_open(name, UO_RDWR|UO_CREATE|UO_TRUNC);
-	if (fd < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't open %s", name);
-		goto fail;
-	}
-
-	sprintf(buf, "123456789ABCDEF");
-	ret = uffs_write(fd, buf, strlen(buf));
-	uffs_Perror(UFFS_ERR_NORMAL, "write %d bytes to file, content: %s", ret, buf);
-
-	ret = uffs_seek(fd, 3, USEEK_SET);
-	uffs_Perror(UFFS_ERR_NORMAL, "new file position: %d", ret);
-
-	memset(buf, 0, sizeof(buf));
-	ret = uffs_read(fd, buf, 5);
-	uffs_Perror(UFFS_ERR_NORMAL, "read %d bytes, content: %s", ret, buf);
-
-	uffs_close(fd);
-
-fail:
-
-	return TRUE;
-}
-
-BOOL cmdTest2(const char *tail)
-{
-	uffs_Perror(UFFS_ERR_NORMAL, "Test return: %s !", DoTest2() == U_SUCC ? "succ" : "failed");
-
-	return TRUE;
-}
-
-/* Test file append and 'random' write */
-BOOL cmdTest3(const char *tail)
-{
-	const char *name;
-	int i;
-	int write_test_seq[] = { 20, 10, 500, 40, 1140, 900, 329, 4560, 352, 1100 };
-
-	if (!tail) {
-		return FALSE;
-	}
-
-	name = cli_getparam(tail, NULL);
-	uffs_Perror(UFFS_ERR_NORMAL, "Test append file %s ...", name);
-	for (i = 1; i < 500; i += 29) {
-		if (test_append_file(name, i) != U_SUCC) {
-			uffs_Perror(UFFS_ERR_NORMAL, "Append file %s test failed at %d !", name, i);
-			return TRUE;
+		mount = argv[1];
+		if (uffs_UnMount(mount) < 0) {
+			MSGLN("Can't unmount %s", mount);
+			return -1;
 		}
 	}
 
-	uffs_Perror(UFFS_ERR_NORMAL, "Check file %s ... ", name);
-	if (test_verify_file(name) != U_SUCC) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Verify file %s failed.", name);
-		return TRUE;
+	return 0;
+}
+
+/** inspect buffers
+ *		inspb [<mount>]
+ */
+static int cmd_inspb(int argc, char *argv[])
+{
+	uffs_Device *dev;
+	const char *mount = "/";
+
+	CHK_ARGC(1, 2);
+
+	dev = uffs_GetDeviceFromMountPoint(mount);
+	if (dev == NULL) {
+		MSGLN("Can't get device from mount point %s", mount);
+		return -1;
+	}
+	uffs_BufInspect(dev);
+	uffs_PutDevice(dev);
+
+	return 0;
+
+}
+
+/** print block wear-leveling information
+ *		wl [<mount>]
+ */
+static int cmd_wl(int argc, char *argv[])
+{
+	const char *mount = "/";
+	uffs_Device *dev;
+	struct uffs_PartitionSt *par;
+	uffs_FileEmu *emu;
+	int i, max;
+	u32 n;
+
+#define NUM_PER_LINE	10
+
+	CHK_ARGC(1, 2);
+
+	if (argc > 1) {
+		mount = argv[1];
 	}
 
-	uffs_Perror(UFFS_ERR_NORMAL, "Test write file ...");
-	for (i = 0; i < sizeof(write_test_seq) / sizeof(int) - 1; i++) {
-		if (test_write_file(name, write_test_seq[i], write_test_seq[i+1]) != U_SUCC) {
-			uffs_Perror(UFFS_ERR_NORMAL, "Test write file failed !");
-			return TRUE;
+	dev = uffs_GetDeviceFromMountPoint(mount);
+	if (dev == NULL) {
+		MSGLN("Can't get device from mount point %s", mount);
+		return -1;
+	}
+
+	par = &dev->par;
+	emu = (uffs_FileEmu *)(dev->attr->_private);
+	max = -1;
+
+	for (i = 0; i < par->end - par->start; i++) {
+		if ((i % NUM_PER_LINE) == 0) {
+			MSG("%04d:", i + par->start);
 		}
+		n = i + par->start;
+		max = (max == -1 ? n :
+				(emu->em_monitor_block[n] > emu->em_monitor_block[max] ? n : max)
+			   );
+		MSG(" %4d", emu->em_monitor_block[n]);
+		if (uffs_TreeFindBadNodeByBlock(dev, n))
+			MSG("%c", 'x');
+		else if (uffs_TreeFindErasedNodeByBlock(dev, n))
+			MSG("%c", ' ');
+		else
+			MSG("%c", '.');
+		if (((i + 1) % NUM_PER_LINE) == 0)
+			MSG("\n");
 	}
+	MSG("\n");
+	MSG("Total blocks %d, peak erase count %d at block %d\n",
+		par->end - par->start, max == -1 ? 0 : emu->em_monitor_block[max], max);
 
-	uffs_Perror(UFFS_ERR_NORMAL, "Check file %s ... ", name);
-	if (test_verify_file(name) != U_SUCC) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Verify file %s failed.", name);
-		return TRUE;
-	}
+	uffs_PutDevice(dev);
 
-	uffs_Perror(UFFS_ERR_NORMAL, "Test succ !");
-
-	return TRUE;
+	return 0;
 }
 
-/* open two files and test write */
-BOOL cmdTest4(const char *tail)
+static const struct cli_command helper_cmds[] = 
 {
-	int fd1 = -1, fd2 = -1;
-
-	uffs_Perror(UFFS_ERR_NORMAL, "open /a ...");
-	if ((fd1 = uffs_open("/a", UO_RDWR | UO_CREATE)) < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't open /a");
-		goto fail_exit;
-	}
-
-	uffs_Perror(UFFS_ERR_NORMAL, "open /b ...");
-	if ((fd2 = uffs_open("/b", UO_RDWR | UO_CREATE)) < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't open /b");
-		uffs_close(fd1);
-		goto fail_exit;
-	}
-
-	uffs_Perror(UFFS_ERR_NORMAL, "write (1) to /a ...");
-	uffs_write(fd1, "Hello,", 6);
-	uffs_Perror(UFFS_ERR_NORMAL, "write (1) to /b ...");
-	uffs_write(fd2, "Hello,", 6);
-	uffs_Perror(UFFS_ERR_NORMAL, "write (2) to /a ...");
-	uffs_write(fd1, "World.", 6);
-	uffs_Perror(UFFS_ERR_NORMAL, "write (2) to /b ...");
-	uffs_write(fd2, "World.", 6);
-	uffs_Perror(UFFS_ERR_NORMAL, "close /a ...");
-	uffs_close(fd1);
-	uffs_Perror(UFFS_ERR_NORMAL, "close /b ...");
-	uffs_close(fd2);
-
-	return TRUE;
-
-fail_exit:
-	return TRUE;
-}
-
-/* test appending file */
-BOOL cmdTest5(const char *tail)
-{
-	int fd = -1;
-	URET ret;
-	char buf[100];
-	const char *name;
-
-	if (!tail) {
-		return FALSE;
-	}
-
-	name = cli_getparam(tail, NULL);
-
-	fd = uffs_open(name, UO_RDWR|UO_APPEND);
-	if (fd < 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Can't open %s", name);
-		goto fail;
-	}
-
-	sprintf(buf, "append test...");
-	ret = uffs_write(fd, buf, strlen(buf));
-	if (ret != strlen(buf)) {
-		uffs_Perror(UFFS_ERR_NORMAL, "write file failed, %d/%d", ret, strlen(buf));
-	}
-	else {
-		uffs_Perror(UFFS_ERR_NORMAL, "write %d bytes to file, content: %s", ret, buf);
-	}
-
-	uffs_close(fd);
-
-fail:
-
-	return TRUE;
-}
-
-
-
-BOOL cmdMount(const char *tail)
-{
-	uffs_MountTable *tab = uffs_GetMountTable();
-	tail = tail;
-
-	while (tab) {
-		uffs_Perror(UFFS_ERR_NORMAL, " %s : (%d) ~ (%d)", tab->mount, tab->start_block, tab->end_block);
-		tab = tab->next;
-	}
-
-	return TRUE;
-}
-
-static struct cli_commandset cmdset[] = 
-{
-    { cmdFormat,	"format",		"[<mount>]",		"Format device" },
-    { cmdMkf,		"mkfile",		"<name>",			"create a new file" },
-    { cmdMkdir,		"mkdir",		"<name>",			"create a new directory" },
-    { cmdRm,		"rm",			"<name>",			"delete file/directory" },
-    { cmdRen,		"mv|ren",		"<old> <new>",		"rename file/directory" },
-    { cmdLs,		"ls",			"<dir>",			"list dirs and files" },
-    { cmdSt,		"info|st",		"<mount>",			"show statistic infomation" },
-    { cmdTest1,		"t1",			"<name>",			"test 1" },
-    { cmdTest2,		"t2",			NULL,				"test 2" },
-    { cmdTest3,		"t3",			"<name>",			"test 3" },
-    { cmdTest4,		"t4",			NULL,				"test 4" },
-    { cmdTest5,		"t5",			"<name>",			"test 5" },
-    { cmdCp,		"cp",			"<src> <des>",		"copy files. the local file name start with '::'" },
-    { cmdCat,		"cat",			"<name>",			"show file content" },
-    { cmdPwd,		"pwd",			NULL,				"show current dir" },
-    { cmdCd,		"cd",			"<path>",			"change current dir" },
-    { cmdMount,		"mount",		NULL,				"list mounted file systems" },
-
+    { cmd_format,	"format",		"[<mount>]",		"Format device" },
+    { cmd_mkf,		"mkfile",		"<name>",			"create a new file" },
+    { cmd_mkdir,	"mkdir",		"<name>",			"create a new directory" },
+    { cmd_rm,		"rm",			"<name>",			"delete file/directory" },
+    { cmd_ren,		"mv|ren",		"<old> <new>",		"rename file/directory" },
+    { cmd_ls,		"ls",			"<dir>",			"list dirs and files" },
+    { cmd_st,		"info|st",		"<mount>",			"show statistic infomation" },
+    { cmd_cp,		"cp",			"<src> <des>",		"copy files. the local file name start with '::'" },
+    { cmd_cat,		"cat",			"<name>",			"show file content" },
+    { cmd_pwd,		"pwd",			NULL,				"show current dir" },
+    { cmd_cd,		"cd",			"<path>",			"change current dir" },
+    { cmd_mount,	"mount",		"[<mount>]",		"mount partition or list mounted partitions" },
+    { cmd_unmount,	"umount",		"[<mount>]",		"unmount partition" },
+	{ cmd_dump,		"dump",			"[<mount>]",		"dump file system", },
+	{ cmd_wl,		"wl",			"[<mount>]",		"show block wear-leveling info", },
+	{ cmd_inspb,	"inspb",		"[<mount>]",		"inspect buffer", },
     { NULL, NULL, NULL, NULL }
 };
 
+static struct cli_commandset helper_cmdset = {
+	helper_cmds,
+};
 
 struct cli_commandset * get_helper_cmds()
 {
-	return cmdset;
+	return &helper_cmdset;
 };

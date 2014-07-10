@@ -36,12 +36,14 @@
  * \author Ricky Zheng, created 8th Jun, 2005
  */
 
-#include "uffs/uffs_config.h"
-#include "uffs/uffs_core.h"
-#include "uffs/uffs_fs.h"
+#ifndef _UFFS_FD_H_
+#define _UFFS_FD_H_
+
+#ifdef __cplusplus
+extern "C"{
+#endif
+
 #include "uffs/uffs.h"
-#include "uffs/uffs_find.h"
-#include <string.h>
 
 /**
  * \brief definitions for uffs_stat::st_mode
@@ -50,8 +52,8 @@
 #define	US_IFREG	0x8000	/* regular */
 #define	US_IFLNK	0xA000	/* symbolic link */
 #define	US_IFDIR	0x4000	/* directory */
-#define	US_IREAD	00400	/* read permission */
-#define	US_IWRITE	00200	/* write permission */
+#define	US_IREAD	0000400	/* read permission */
+#define	US_IWRITE	0000200	/* write permission */
 
 #define	US_IRWXU	00700	/* RWX	owner */
 #define	US_IRUSR	00400	/* R	owner */
@@ -69,65 +71,50 @@
 /**
  * \brief POSIX dirent
  */
-struct uffs_dirent 
-{
-    int 	d_ino;						/* inode number (serial number or this record) */
-	char 	d_name[MAX_FILENAME_LENGTH];	/* name of this record */
-    int 	d_off;						/* offset to this dirent */
-    u16 	d_reclen;						/* length of this uffs_dirent */
-    u16 	d_namelen;						/* length of this d_name */
-	u32 	d_type;							/* type of this record ,要与info.attr的类型保持一致*/
+struct uffs_dirent {
+    int d_ino;							/* inode number (serial number of this object) */
+    int d_off;							/* offset to this dirent */
+    unsigned short int d_reclen;		/* length of this uffs_dirent */
+    unsigned short int d_namelen;		/* length of this d_name */
+    unsigned char d_type;				/* type of this record */
+    char d_name[256];					/* name of this object */
 };
 
-/**
- * \brief POSIX DIR
- */
-typedef struct uffs_dirSt 
-{
-    struct uffs_ObjectSt   	*obj;		/* dir object */
-    struct uffs_FindInfoSt	f;		/* find info */
-    struct uffs_ObjectInfoSt	info;		/* object info */
-    struct uffs_dirent 	dirent;	/* dir entry */
-}uffs_DIR;
+struct uffs_dirSt;
+typedef struct uffs_dirSt uffs_DIR;
 
 /**
  * \brief POSIX stat
  */
-struct uffs_stat 
-{
-    int				st_dev;     /* ID of device containing file */
-    int				st_ino;     /* inode number */
-    int				st_mode;    /* protection */
-    int				st_nlink;   /* number of hard links */
-    int				st_uid;     /* user ID of owner */
-    int				st_gid;     /* group ID of owner */
-    int				st_rdev;    /* device ID (if special file) */
-    long			st_size;    /* total size, in bytes */
-    int				st_blksize; /* blocksize for filesystem I/O */
-    int				st_blocks;  /* number of blocks allocated */
-    u32		st_atime;   /* time of last access */
-    u32		st_mtime;   /* time of last modification */
-    u32		st_ctime;   /* time of last status change */
+struct uffs_stat {
+    int			st_dev;     /* ID of device containing file */
+    int			st_ino;     /* inode number */
+    int			st_mode;    /* protection */
+    int			st_nlink;   /* number of hard links */
+    int			st_uid;     /* user ID of owner */
+    int			st_gid;     /* group ID of owner */
+    int			st_rdev;    /* device ID (if special file) */
+    long		st_size;    /* total size, in bytes */
+    int			st_blksize; /* blocksize for filesystem I/O */
+    int			st_blocks;  /* number of blocks allocated */
+    unsigned int	st_atime;   /* time of last access */
+    unsigned int	st_mtime;   /* time of last modification */
+    unsigned int	st_ctime;   /* time of last status change */
 };
 
-
-int uffs_InitDirEntryBuf(void);
-int uffs_ReleaseDirEntryBuf(void);
-uffs_Pool * uffs_GetDirEntryBufPool(void);
-
-/* POSIX compliant file system APIs */
+/* POSIX complaint file system APIs */
 
 int uffs_open(const char *name, int oflag, ...);
 int uffs_close(int fd);
 int uffs_read(int fd, void *data, int len);
-int uffs_write(int fd, void *data, int len);
+int uffs_write(int fd, const void *data, int len);
 long uffs_seek(int fd, long offset, int origin);
 long uffs_tell(int fd);
 int uffs_eof(int fd);
 int uffs_flush(int fd);
 int uffs_rename(const char *old_name, const char *new_name);
 int uffs_remove(const char *name);
-int uffs_truncate(int fd, long remain);
+int uffs_ftruncate(int fd, long remain);
 
 int uffs_mkdir(const char *name, ...);
 int uffs_rmdir(const char *name);
@@ -142,11 +129,23 @@ struct uffs_dirent * uffs_readdir(uffs_DIR *dirp);
 
 void uffs_rewinddir(uffs_DIR *dirp);
 
-#if 0
-void uffs_seekdir(uffs_DIR *dirp, long loc);
-long uffs_telldir(uffs_DIR *dirp);
-#endif
 
 int uffs_get_error(void);
 int uffs_set_error(int err);
+
+int uffs_version(void);
+int uffs_format(const char *mount_point);
+
+long uffs_space_total(const char *mount_point);
+long uffs_space_used(const char *mount_point);
+long uffs_space_free(const char *mount_point);
+
+void uffs_flush_all(const char *mount_point);
+
+#ifdef __cplusplus
+}
+#endif
+#endif
+
+
 

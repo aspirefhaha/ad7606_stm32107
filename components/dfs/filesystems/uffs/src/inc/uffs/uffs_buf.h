@@ -56,7 +56,7 @@ extern "C"{
 #define UFFS_BUF_DIRTY		2			//!< buffer data is modified
 
 /** for uffs_BufSt::ext_mark */
-#define UFFS_BUF_EXT_MARK_TRUNC_TAIL		1	//!<
+#define UFFS_BUF_EXT_MARK_TRUNC_TAIL 1	//!< the last page of file (when truncating a file)
 
 /** uffs page buffer */
 struct uffs_BufSt{
@@ -65,6 +65,7 @@ struct uffs_BufSt{
 	struct uffs_BufSt *next_dirty;		//!< link to next dirty buffer
 	struct uffs_BufSt *prev_dirty;		//!< link to previous dirty buffer
 	u8 type;							//!< #UFFS_TYPE_DIR or #UFFS_TYPE_FILE or #UFFS_TYPE_DATA
+	u8 ext_mark;						//!< extension mark. 
 	u16 parent;							//!< parent serial
 	u16 serial;							//!< serial 
 	u16 page_id;						//!< page id 
@@ -74,7 +75,6 @@ struct uffs_BufSt{
 	u16 check_sum;						//!< checksum field
 	u8 * data;							//!< data buffer
 	u8 * header;						//!< header
-	int ext_mark;						//!< extension mark. 
 };
 
 #define uffs_BufIsFree(buf) (buf->ref_count == 0 ? U_TRUE : U_FALSE)
@@ -87,13 +87,17 @@ URET uffs_BufReleaseAll(struct uffs_DeviceSt *dev);
 
 /** find the page buffer, move to link list head if found */
 uffs_Buf * uffs_BufGet(struct uffs_DeviceSt *dev, u16 parent, u16 serial, u16 page_id);
-uffs_Buf *uffs_BufGetEx(struct uffs_DeviceSt *dev, u8 type, TreeNode *node, u16 page_id);
+uffs_Buf *uffs_BufGetEx(struct uffs_DeviceSt *dev, u8 type, TreeNode *node, u16 page_id, int oflag);
 
 /** alloc a new page buffer */
 uffs_Buf *uffs_BufNew(struct uffs_DeviceSt *dev, u8 type, u16 parent, u16 serial, u16 page_id);
 
 /** find the page buffer (not affect the reference counter) */
 uffs_Buf * uffs_BufFind(uffs_Device *dev, u16 parent, u16 serial, u16 page_id);
+
+/** find the page buffer from #start (not affect the reference counter) */
+uffs_Buf * uffs_BufFindFrom(uffs_Device *dev, uffs_Buf *start,
+						u16 parent, u16 serial, u16 page_id);
 
 /** put page buffer back to pool, called in pair with #uffs_Get,#uffs_GetEx or #uffs_BufNew */
 URET uffs_BufPut(uffs_Device *dev, uffs_Buf *buf);

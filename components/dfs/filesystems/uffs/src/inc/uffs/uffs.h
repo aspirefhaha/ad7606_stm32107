@@ -37,8 +37,6 @@
 
 #ifndef _UFFS_H_
 #define _UFFS_H_
-#include <rtthread.h>
-#include "uffs/uffs_types.h"
 
 #ifdef __cplusplus
 extern "C"{
@@ -53,33 +51,37 @@ extern "C"{
 
 #define UO_CREATE		0x0100
 #define UO_TRUNC		0x0200
-#define UO_EXCL			0x0400		
+#define UO_EXCL			0x0400
+
+#define UO_NOECC		0x0800		/** skip ECC when reading file data from media */
+
 
 #define UO_DIR			0x1000		/** open a directory */
 
 
 
-#define UENOERR 		0	/** no error */
-#define UEACCES			1	/** Tried to open read-only file
-						 	for writing, or files sharing mode
-						 	does not allow specified operations,
-						 	or given path is directory */
+#define UENOERR 0		/** no error */
+#define UEACCES	1		/** Tried to open read-only file
+						 for writing, or files sharing mode
+						 does not allow specified operations,
+						 or given path is directory */
 
-#define UEEXIST			2	/** _O_CREAT and _O_EXCL flags specified,
+#define UEEXIST	2		/** _O_CREAT and _O_EXCL flags specified,
 							but filename already exists */
-#define UEINVAL			3	/** Invalid oflag or pmode argument */
-#define UEMFILE			4	/** No more file handles available
-						  	(too many open files)  */
-#define UENOENT			5	/** file or path not found */
-#define UETIME			6	/** can't set file time */
-#define UEBADF			9	/** invalid file handle */
-#define UENOMEM			10	/** no enough memory */
-#define UEIOERR			11	/** I/O error from lower level flash operation */
-#define UENOTDIR 		12	/** Not a directory */
-#define UEISDIR 		13	/** Is a directory */ 
+#define UEINVAL	3		/** Invalid oflag or pmode argument */
+#define UEMFILE	4		/** No more file handles available
+						  (too many open files)  */
+#define UENOENT	5		/** file or path not found */
+#define UETIME	6		/** can't set file time */
+#define UEBADF	9		/** invalid file handle */
+#define UENOMEM	10		/** no enough memory */
+#define UEIOERR	11		/** I/O error from lower level flash operation */
+#define UENOTDIR 12		/** Not a directory */
+#define UEISDIR 13		/** Is a directory */    
 
-#define UEUNKNOWN		100	/** unknown error */
-	
+#define UEUNKNOWN_ERR	100	/** unknown error */
+
+
 
 #define _SEEK_CUR		0		/** seek from current position */
 #define _SEEK_SET		1		/** seek from beginning of file */
@@ -88,46 +90,6 @@ extern "C"{
 #define USEEK_CUR		_SEEK_CUR
 #define USEEK_SET		_SEEK_SET
 #define USEEK_END		_SEEK_END
-
-
-
-
-/** 
- * \def MAX_FILENAME_LENGTH 
- * \note Be careful: it's part of the physical format (see: uffs_FileInfoSt.name)
- *    !!DO NOT CHANGE IT AFTER FILE SYSTEM IS FORMATED!!
- */
-#define MAX_FILENAME_LENGTH			32
-
-/** \note 8-bits attr goes to uffs_dirent::d_type */
-#define FILE_ATTR_DIR		(1 << 7)	//!< attribute for directory
-#define FILE_ATTR_WRITE		(1 << 0)	//!< writable
-
-
-/*
- * \structure uffs_FileInfoSt
- * \brief file/dir entry info in physical storage format
- */
-struct uffs_FileInfoSt {
-	u32 attr;				//!< file/dir attribute
-	u32 create_time;
-	u32 last_modify;
-	u32 access;
-	u32 reserved;
-	u32 name_len;			//!< length of file/dir name
-	char name[MAX_FILENAME_LENGTH];
-};
-typedef struct uffs_FileInfoSt uffs_FileInfo;
-
-/**
- * \struct uffs_ObjectInfoSt
- * \brief object info
- */
-typedef struct uffs_ObjectInfoSt {
-	uffs_FileInfo info;
-	u32 len;				//!< length of file
-	u16 serial;				//!< object serial num
-} uffs_ObjectInfo;
 
 
 #ifdef __cplusplus

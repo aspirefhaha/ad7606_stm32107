@@ -1,11 +1,21 @@
 /*
  * File      : object.c
  * This file is part of RT-Thread RTOS
- * COPYRIGHT (C) 2006 - 2011, RT-Thread Development Team
+ * COPYRIGHT (C) 2006 - 2012, RT-Thread Development Team
  *
- * The license and distribution terms for this file may be
- * found in the file LICENSE in this distribution or at
- * http://www.rt-thread.org/license/LICENSE
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  * Change Logs:
  * Date           Author       Notes
@@ -20,47 +30,49 @@
 #include <rtthread.h>
 #include <rthw.h>
 
-#include "kservice.h"
-
-#define _OBJ_CONTAINER_LIST_INIT(c) 	\
-	{&(rt_object_container[c].object_list), &(rt_object_container[c].object_list)}
+#define _OBJ_CONTAINER_LIST_INIT(c)     \
+    {&(rt_object_container[c].object_list), &(rt_object_container[c].object_list)}
 struct rt_object_information rt_object_container[RT_Object_Class_Unknown] =
 {
-	/* initialize object container - thread */
-	{RT_Object_Class_Thread, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Thread), sizeof(struct rt_thread)},
+    /* initialize object container - thread */
+    {RT_Object_Class_Thread, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Thread), sizeof(struct rt_thread)},
 #ifdef RT_USING_SEMAPHORE
-	/* initialize object container - semaphore */
-	{RT_Object_Class_Semaphore, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Semaphore), sizeof(struct rt_semaphore)},
+    /* initialize object container - semaphore */
+    {RT_Object_Class_Semaphore, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Semaphore), sizeof(struct rt_semaphore)},
 #endif
 #ifdef RT_USING_MUTEX
-	/* initialize object container - mutex */
-	{RT_Object_Class_Mutex, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Mutex), sizeof(struct rt_mutex)},
+    /* initialize object container - mutex */
+    {RT_Object_Class_Mutex, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Mutex), sizeof(struct rt_mutex)},
 #endif
 #ifdef RT_USING_EVENT
-	/* initialize object container - event */
-	{RT_Object_Class_Event, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Event), sizeof(struct rt_event)},
+    /* initialize object container - event */
+    {RT_Object_Class_Event, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Event), sizeof(struct rt_event)},
 #endif
 #ifdef RT_USING_MAILBOX
-	/* initialize object container - mailbox */
-	{RT_Object_Class_MailBox, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_MailBox), sizeof(struct rt_mailbox)},
+    /* initialize object container - mailbox */
+    {RT_Object_Class_MailBox, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_MailBox), sizeof(struct rt_mailbox)},
 #endif
 #ifdef RT_USING_MESSAGEQUEUE
-	/* initialize object container - message queue */
-	{RT_Object_Class_MessageQueue, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_MessageQueue), sizeof(struct rt_messagequeue)},
+    /* initialize object container - message queue */
+    {RT_Object_Class_MessageQueue, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_MessageQueue), sizeof(struct rt_messagequeue)},
+#endif
+#ifdef RT_USING_MEMHEAP
+    /* initialize object container - memory heap */
+    {RT_Object_Class_MemHeap, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_MemHeap), sizeof(struct rt_memheap)},
 #endif
 #ifdef RT_USING_MEMPOOL
-	/* initialize object container - memory pool */
-	{RT_Object_Class_MemPool, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_MemPool), sizeof(struct rt_mempool)},
+    /* initialize object container - memory pool */
+    {RT_Object_Class_MemPool, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_MemPool), sizeof(struct rt_mempool)},
 #endif
 #ifdef RT_USING_DEVICE
-	/* initialize object container - device */
-	{RT_Object_Class_Device, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Device), sizeof(struct rt_device)},
+    /* initialize object container - device */
+    {RT_Object_Class_Device, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Device), sizeof(struct rt_device)},
 #endif
-	/* initialize object container - timer */
-	{RT_Object_Class_Timer, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Timer), sizeof(struct rt_timer)},
+    /* initialize object container - timer */
+    {RT_Object_Class_Timer, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Timer), sizeof(struct rt_timer)},
 #ifdef RT_USING_MODULE
-	/* initialize object container - module */
-	{RT_Object_Class_Module, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Module), sizeof(struct rt_module)},
+    /* initialize object container - module */
+    {RT_Object_Class_Module, _OBJ_CONTAINER_LIST_INIT(RT_Object_Class_Module), sizeof(struct rt_module)},
 #endif
 };
 
@@ -74,6 +86,7 @@ void (*rt_object_put_hook)(struct rt_object *object);
 /**
  * @addtogroup Hook
  */
+
 /*@{*/
 
 /**
@@ -84,7 +97,7 @@ void (*rt_object_put_hook)(struct rt_object *object);
  */
 void rt_object_attach_sethook(void (*hook)(struct rt_object *object))
 {
-	rt_object_attach_hook = hook;
+    rt_object_attach_hook = hook;
 }
 
 /**
@@ -95,7 +108,7 @@ void rt_object_attach_sethook(void (*hook)(struct rt_object *object))
  */
 void rt_object_detach_sethook(void (*hook)(struct rt_object *object))
 {
-	rt_object_detach_hook = hook;
+    rt_object_detach_hook = hook;
 }
 
 /**
@@ -113,7 +126,7 @@ void rt_object_detach_sethook(void (*hook)(struct rt_object *object))
  */
 void rt_object_trytake_sethook(void (*hook)(struct rt_object *object))
 {
-	rt_object_trytake_hook = hook;
+    rt_object_trytake_hook = hook;
 }
 
 /**
@@ -132,7 +145,7 @@ void rt_object_trytake_sethook(void (*hook)(struct rt_object *object))
  */
 void rt_object_take_sethook(void (*hook)(struct rt_object *object))
 {
-	rt_object_take_hook = hook;
+    rt_object_take_hook = hook;
 }
 
 /**
@@ -143,7 +156,7 @@ void rt_object_take_sethook(void (*hook)(struct rt_object *object))
  */
 void rt_object_put_sethook(void (*hook)(struct rt_object *object))
 {
-	rt_object_put_hook = hook;
+    rt_object_put_hook = hook;
 }
 
 /*@}*/
@@ -164,58 +177,64 @@ void rt_system_object_init(void)
 /**
  * @addtogroup KernelObject
  */
+
 /*@{*/
 
 /**
  * This function will return the specified type of object information.
- * 
+ *
  * @param type the type of object
  * @return the object type information or RT_NULL
  */
-struct rt_object_information *rt_object_get_information(enum rt_object_class_type type)
+struct rt_object_information *
+rt_object_get_information(enum rt_object_class_type type)
 {
-	return &rt_object_container[type];
+    return &rt_object_container[type];
 }
+RTM_EXPORT(rt_object_get_information);
 
 /**
- * This function will initialize an object and add it to object system management.
+ * This function will initialize an object and add it to object system
+ * management.
  *
  * @param object the specified object to be initialized.
  * @param type the object type.
  * @param name the object name. In system, the object's name must be unique.
  */
-void rt_object_init(struct rt_object *object, enum rt_object_class_type type, const char *name)
+void rt_object_init(struct rt_object         *object,
+                    enum rt_object_class_type type,
+                    const char               *name)
 {
-	register rt_base_t temp;
-	struct rt_object_information *information;
+    register rt_base_t temp;
+    struct rt_object_information *information;
 
 #ifdef RT_USING_MODULE
-	/* get module object information */
-	information = (rt_module_self() != RT_NULL) ? 
-		&rt_module_self()->module_object[type] : &rt_object_container[type];
+    /* get module object information */
+    information = (rt_module_self() != RT_NULL) ?
+        &rt_module_self()->module_object[type] : &rt_object_container[type];
 #else
-	/* get object information */
-	information = &rt_object_container[type];
+    /* get object information */
+    information = &rt_object_container[type];
 #endif
 
-	/* initialize object's parameters */
+    /* initialize object's parameters */
 
-	/* set object type to static */
-	object->type = type | RT_Object_Class_Static;
+    /* set object type to static */
+    object->type = type | RT_Object_Class_Static;
 
-	/* copy name */
-	rt_strncpy(object->name, name, RT_NAME_MAX);
+    /* copy name */
+    rt_strncpy(object->name, name, RT_NAME_MAX);
 
-	RT_OBJECT_HOOK_CALL(rt_object_attach_hook, (object));
+    RT_OBJECT_HOOK_CALL(rt_object_attach_hook, (object));
 
-	/* lock interrupt */
-	temp = rt_hw_interrupt_disable();
+    /* lock interrupt */
+    temp = rt_hw_interrupt_disable();
 
-	/* insert object into information object list */
-	rt_list_insert_after(&(information->object_list), &(object->list));
+    /* insert object into information object list */
+    rt_list_insert_after(&(information->object_list), &(object->list));
 
-	/* unlock interrupt */
-	rt_hw_interrupt_enable(temp);
+    /* unlock interrupt */
+    rt_hw_interrupt_enable(temp);
 }
 
 /**
@@ -226,21 +245,21 @@ void rt_object_init(struct rt_object *object, enum rt_object_class_type type, co
  */
 void rt_object_detach(rt_object_t object)
 {
-	register rt_base_t temp;
+    register rt_base_t temp;
 
-	/* object check */
-	RT_ASSERT(object != RT_NULL);
+    /* object check */
+    RT_ASSERT(object != RT_NULL);
 
-	RT_OBJECT_HOOK_CALL(rt_object_detach_hook, (object));
+    RT_OBJECT_HOOK_CALL(rt_object_detach_hook, (object));
 
-	/* lock interrupt */
-	temp = rt_hw_interrupt_disable();
+    /* lock interrupt */
+    temp = rt_hw_interrupt_disable();
 
-	/* remove from old list */
-	rt_list_remove(&(object->list));
+    /* remove from old list */
+    rt_list_remove(&(object->list));
 
-	/* unlock interrupt */
-	rt_hw_interrupt_enable(temp);
+    /* unlock interrupt */
+    rt_hw_interrupt_enable(temp);
 }
 
 #ifdef RT_USING_HEAP
@@ -254,60 +273,63 @@ void rt_object_detach(rt_object_t object)
  */
 rt_object_t rt_object_allocate(enum rt_object_class_type type, const char *name)
 {
-	struct rt_object *object;
-	register rt_base_t temp;
-	struct rt_object_information *information;
+    struct rt_object *object;
+    register rt_base_t temp;
+    struct rt_object_information *information;
 
-	RT_DEBUG_NOT_IN_INTERRUPT;
+    RT_DEBUG_NOT_IN_INTERRUPT;
 
 #ifdef RT_USING_MODULE
-	/* get module object information, module object should be managed by kernel object container */
-	information = (rt_module_self() != RT_NULL && (type != RT_Object_Class_Module)) ? 
-		&rt_module_self()->module_object[type] : &rt_object_container[type];
+    /*
+     * get module object information,
+     * module object should be managed by kernel object container
+     */
+    information = (rt_module_self() != RT_NULL && (type != RT_Object_Class_Module)) ?
+                  &rt_module_self()->module_object[type] : &rt_object_container[type];
 #else
-	/* get object information */
-	information = &rt_object_container[type];
+    /* get object information */
+    information = &rt_object_container[type];
 #endif
 
-	object = (struct rt_object *)rt_malloc(information->object_size);
-	if (object == RT_NULL)
-	{
-		/* no memory can be allocated */
-		return RT_NULL;
-	}
-	
-	/* initialize object's parameters */
+    object = (struct rt_object *)RT_KERNEL_MALLOC(information->object_size);
+    if (object == RT_NULL)
+    {
+        /* no memory can be allocated */
+        return RT_NULL;
+    }
 
-	/* set object type */
-	object->type = type;
+    /* initialize object's parameters */
 
-	/* set object flag */
-	object->flag = 0;
+    /* set object type */
+    object->type = type;
+
+    /* set object flag */
+    object->flag = 0;
 
 #ifdef RT_USING_MODULE
-	if (rt_module_self() != RT_NULL)
-	{
-		object->flag |= RT_OBJECT_FLAG_MODULE;
-	}
-	object->module_id = (void *)rt_module_self();
+    if (rt_module_self() != RT_NULL)
+    {
+        object->flag |= RT_OBJECT_FLAG_MODULE;
+    }
+    object->module_id = (void *)rt_module_self();
 #endif
 
-	/* copy name */
-	rt_strncpy(object->name, name, RT_NAME_MAX);
+    /* copy name */
+    rt_strncpy(object->name, name, RT_NAME_MAX);
 
-	RT_OBJECT_HOOK_CALL(rt_object_attach_hook, (object));
+    RT_OBJECT_HOOK_CALL(rt_object_attach_hook, (object));
 
-	/* lock interrupt */
-	temp = rt_hw_interrupt_disable();
+    /* lock interrupt */
+    temp = rt_hw_interrupt_disable();
 
-	/* insert object into information object list */
-	rt_list_insert_after(&(information->object_list), &(object->list));
+    /* insert object into information object list */
+    rt_list_insert_after(&(information->object_list), &(object->list));
 
-	/* unlock interrupt */
-	rt_hw_interrupt_enable(temp);
+    /* unlock interrupt */
+    rt_hw_interrupt_enable(temp);
 
-	/* return object */
-	return object;
+    /* return object */
+    return object;
 }
 
 /**
@@ -317,31 +339,31 @@ rt_object_t rt_object_allocate(enum rt_object_class_type type, const char *name)
  */
 void rt_object_delete(rt_object_t object)
 {
-	register rt_base_t temp;
+    register rt_base_t temp;
 
-	/* object check */
-	RT_ASSERT(object != RT_NULL);
-	RT_ASSERT(!(object->type & RT_Object_Class_Static));
+    /* object check */
+    RT_ASSERT(object != RT_NULL);
+    RT_ASSERT(!(object->type & RT_Object_Class_Static));
 
-	RT_OBJECT_HOOK_CALL(rt_object_detach_hook, (object));
+    RT_OBJECT_HOOK_CALL(rt_object_detach_hook, (object));
 
-	/* lock interrupt */
-	temp = rt_hw_interrupt_disable();
+    /* lock interrupt */
+    temp = rt_hw_interrupt_disable();
 
-	/* remove from old list */
-	rt_list_remove(&(object->list));
+    /* remove from old list */
+    rt_list_remove(&(object->list));
 
-	/* unlock interrupt */
-	rt_hw_interrupt_enable(temp);
+    /* unlock interrupt */
+    rt_hw_interrupt_enable(temp);
 
 #if defined(RT_USING_MODULE) && defined(RT_USING_SLAB)
-	if (object->flag & RT_OBJECT_FLAG_MODULE) 
-		rt_module_free((rt_module_t)object->module_id, object);
-	else
+    if (object->flag & RT_OBJECT_FLAG_MODULE)
+        rt_module_free((rt_module_t)object->module_id, object);
+    else
 #endif
 
-	/* free the memory of object */
-	rt_free(object);
+    /* free the memory of object */
+    RT_KERNEL_FREE(object);
 }
 #endif
 
@@ -352,16 +374,17 @@ void rt_object_delete(rt_object_t object)
  *
  * @param object the specified object to be judged.
  *
- * @return RT_EOK if a system object, RT_ERROR for others.
+ * @return RT_TRUE if a system object, RT_FALSE for others.
  */
-rt_err_t rt_object_is_systemobject(rt_object_t object)
+rt_bool_t rt_object_is_systemobject(rt_object_t object)
 {
-	/* object check */
-	RT_ASSERT(object != RT_NULL);
+    /* object check */
+    RT_ASSERT(object != RT_NULL);
 
-	if (object->type & RT_Object_Class_Static) return RT_EOK;
+    if (object->type & RT_Object_Class_Static)
+        return RT_TRUE;
 
-	return -RT_ERROR;
+    return RT_FALSE;
 }
 
 /**
@@ -378,39 +401,42 @@ rt_err_t rt_object_is_systemobject(rt_object_t object)
  */
 rt_object_t rt_object_find(const char *name, rt_uint8_t type)
 {
-	struct rt_object *object;
-	struct rt_list_node *node;
-	struct rt_object_information *information;
-	extern volatile rt_uint8_t rt_interrupt_nest;
+    struct rt_object *object;
+    struct rt_list_node *node;
+    struct rt_object_information *information;
+    extern volatile rt_uint8_t rt_interrupt_nest;
 
-	/* parameter check */
-	if ((name == RT_NULL) || (type > RT_Object_Class_Unknown))
-		return RT_NULL;
+    /* parameter check */
+    if ((name == RT_NULL) || (type > RT_Object_Class_Unknown))
+        return RT_NULL;
 
-	/* which is invoke in interrupt status */
-	if (rt_interrupt_nest != 0)
-		RT_ASSERT(0);
+    /* which is invoke in interrupt status */
+    if (rt_interrupt_nest != 0)
+        RT_ASSERT(0);
 
-	/* enter critical */
-	rt_enter_critical();
+    /* enter critical */
+    rt_enter_critical();
 
-	/* try to find object */
-	information = &rt_object_container[type];
-	for (node = information->object_list.next; node != &(information->object_list); node = node->next)
-	{
-		object = rt_list_entry(node, struct rt_object, list);
-		if (rt_strncmp(object->name, name, RT_NAME_MAX) == 0)
-		{
-			/* leave critical */
-			rt_exit_critical();
+    /* try to find object */
+    information = &rt_object_container[type];
+    for (node  = information->object_list.next;
+         node != &(information->object_list);
+         node  = node->next)
+    {
+        object = rt_list_entry(node, struct rt_object, list);
+        if (rt_strncmp(object->name, name, RT_NAME_MAX) == 0)
+        {
+            /* leave critical */
+            rt_exit_critical();
 
-			return (rt_object_t)object;
-		}
-	}
+            return object;
+        }
+    }
 
-	/* leave critical */
-	rt_exit_critical();
+    /* leave critical */
+    rt_exit_critical();
 
-	return RT_NULL;
+    return RT_NULL;
 }
+
 /*@}*/

@@ -28,7 +28,6 @@
 /* #define RT_USING_TIMER_SOFT */
 #define RT_TIMER_THREAD_PRIO		4
 #define RT_TIMER_THREAD_STACK_SIZE	512
-#define RT_TIMER_TICK_PER_SECOND	10
 
 /* SECTION: IPC */
 /* Using Semaphore*/
@@ -59,15 +58,20 @@
 /* SECTION: Device System */
 /* Using Device System */
 #define RT_USING_DEVICE
-#define RT_USING_UART2
+#define RT_USING_SPI
 
 /* SECTION: Console options */
 #define RT_USING_CONSOLE
 /* the buffer size of console*/
 #define RT_CONSOLEBUF_SIZE	128
 
-#define RT_USING_AD7606
-#define RT_USING_M3AD
+// <string name="RT_CONSOLE_DEVICE_NAME" description="console device name" default="uart3" />
+#define RT_CONSOLE_DEVICE_NAME	"uart2"
+// </section>
+
+// <section name="RT_USING_COMPONENTS_INIT" description="Using components init" default="true" >
+#define RT_USING_COMPONENTS_INIT
+// </section>
 
 /* SECTION: finsh, a C-Express shell */
 #define RT_USING_FINSH
@@ -75,10 +79,12 @@
 #define FINSH_USING_SYMTAB
 #define FINSH_USING_DESCRIPTION
 
+#define RT_USING_AD7606
+#define RT_USING_M3AD
+
 /* SECTION: device filesystem */
 //#define RT_USING_DFS
 #define RT_USING_DFS_ELMFAT
-#define RT_DFS_ELM_WORD_ACCESS
 /* Reentrancy (thread safe) of the FatFs module.  */
 #define RT_DFS_ELM_REENTRANT
 /* Number of volumes (logical drives) to be used. */
@@ -106,7 +112,6 @@
 /* Enable DNS */
 #define RT_LWIP_DNS
 
-//#define RT_LWIP_DHCP
 #define LWIP_NETIF_LINK_CALLBACK	1
 #define LWIP_NETIF_STATUS_CALLBACK	1
 
@@ -117,7 +122,7 @@
 #define RT_LWIP_IPADDR0	192
 #define RT_LWIP_IPADDR1	168
 #define RT_LWIP_IPADDR2	2
-#define RT_LWIP_IPADDR3	222
+#define RT_LWIP_IPADDR3	2
 
 /* gateway address of target*/
 #define RT_LWIP_GWADDR0	192
@@ -153,5 +158,12 @@
 #define CHECKSUM_GEN_TCP                0
 #define CHECKSUM_GEN_IP                 0
 #define CHECKSUM_GEN_UDP                0
+
+// <bool name="RT_USING_CMSIS_OS" description="Using CMSIS OS API" default="true" />
+// #define RT_USING_CMSIS_OS
+// <bool name="RT_USING_RTT_CMSIS" description="Using CMSIS in RTT" default="true" />
+#define RT_USING_RTT_CMSIS
+// <bool name="RT_USING_BSP_CMSIS" description="Using CMSIS in BSP" default="true" />
+// #define RT_USING_BSP_CMSIS
 
 #endif

@@ -42,17 +42,33 @@
 extern "C"{
 #endif
 
-
 #define UFFS_TYPE_DIR		0
 #define UFFS_TYPE_FILE		1
 #define UFFS_TYPE_DATA		2
 #define UFFS_TYPE_RESV		3
 #define UFFS_TYPE_INVALID	0xFF
 
-struct BlockListSt {	/* 10 bytes */
+struct uffs_NodeTypeNameMapSt {
+	int type;
+	const char *name;
+};
+
+#define UFFS_TYPE_NAME_MAP { \
+	{UFFS_TYPE_DIR, "DIR"}, \
+	{UFFS_TYPE_FILE, "FILE"}, \
+	{UFFS_TYPE_DATA, "DATA"}, \
+	{UFFS_TYPE_RESV, "RESV"}, \
+	{UFFS_TYPE_INVALID, "INVALID"} \
+}
+
+struct BlockListSt {	/* 12 bytes */
 	struct uffs_TreeNodeSt * next;
 	struct uffs_TreeNodeSt * prev;
 	u16 block;
+	union {
+		u16 serial;    /* for suspended block list */
+		u8 need_check; /* for erased block list */
+	} u;
 };
 
 struct DirhSt {		/* 8 bytes */
@@ -87,9 +103,7 @@ typedef struct uffs_TreeNodeSt {
 		struct FdataSt data;
 	} u;
 	u16 hash_next;		
-#ifdef CONFIG_TREE_NODE_USE_DOUBLE_LINK
 	u16 hash_prev;			
-#endif
 } TreeNode;
 
 
@@ -154,6 +168,7 @@ typedef struct uffs_TreeNodeSt {
 struct uffs_TreeSt {
 	TreeNode *erased;					//!< erased block list head
 	TreeNode *erased_tail;				//!< erased block list tail
+	TreeNode *suspend;					//!< suspended block list
 	int erased_count;					//!< erased block counter
 	TreeNode *bad;						//!< bad block list
 	int bad_count;						//!< bad block count
@@ -183,6 +198,10 @@ TreeNode * uffs_TreeFindDataNodeByBlock(uffs_Device *dev, u16 block);
 TreeNode * uffs_TreeFindErasedNodeByBlock(uffs_Device *dev, u16 block);
 TreeNode * uffs_TreeFindBadNodeByBlock(uffs_Device *dev, u16 block);
 
+void uffs_TreeSuspendAdd(uffs_Device *dev, TreeNode *node);
+TreeNode * uffs_TreeFindSuspendNode(uffs_Device *dev, u16 serial);
+void uffs_TreeRemoveSuspendNode(uffs_Device *dev, TreeNode *node);
+
 #define SEARCH_REGION_DIR		1
 #define SEARCH_REGION_FILE		2
 #define SEARCH_REGION_DATA		4
@@ -199,15 +218,12 @@ TreeNode * uffs_TreeGetErasedNode(uffs_Device *dev);
 void uffs_InsertNodeToTree(uffs_Device *dev, u8 type, TreeNode *node);
 void uffs_InsertToErasedListHead(uffs_Device *dev, TreeNode *node);
 void uffs_TreeInsertToErasedListTail(uffs_Device *dev, TreeNode *node);
+void uffs_TreeInsertToErasedListTailEx(uffs_Device *dev, TreeNode *node, int need_check);
 void uffs_TreeInsertToBadBlockList(uffs_Device *dev, TreeNode *node);
 
 void uffs_BreakFromEntry(uffs_Device *dev, u8 type, TreeNode *node);
 
 void uffs_TreeSetNodeBlock(u8 type, TreeNode *node, u16 block);
-
-
-
-
 
 
 #ifdef __cplusplus

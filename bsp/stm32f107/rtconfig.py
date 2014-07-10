@@ -1,7 +1,12 @@
+import os
+
 # toolchains options
 ARCH='arm'
 CPU='cortex-m3'
 CROSS_TOOL='keil'
+
+if os.getenv('RTT_CC'):
+	CROSS_TOOL = os.getenv('RTT_CC')
 
 # cross_tool provides the cross compiler
 # EXEC_PATH is the compiler execute path, for example, CodeSourcery, Keil MDK, IAR
@@ -11,10 +16,13 @@ if  CROSS_TOOL == 'gcc':
 	EXEC_PATH 	= 'E:/Program Files/CodeSourcery/Sourcery G++ Lite/bin'
 elif CROSS_TOOL == 'keil':
 	PLATFORM 	= 'armcc'
-	EXEC_PATH 	= 'E:/Keil'
+	EXEC_PATH 	= 'C:/Keil'
 elif CROSS_TOOL == 'iar':
 	PLATFORM 	= 'iar'
-	IAR_PATH 	= 'E:/Program Files/IAR Systems/Embedded Workbench 6.0'
+	IAR_PATH 	= 'C:/Program Files/IAR Systems/Embedded Workbench 6.0 Evaluation'
+
+if os.getenv('RTT_EXEC_PATH'):
+	EXEC_PATH = os.getenv('RTT_EXEC_PATH')
 
 BUILD = 'debug'
 STM32_TYPE = 'STM32F10X_CL'

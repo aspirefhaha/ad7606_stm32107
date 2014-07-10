@@ -35,60 +35,59 @@
  * \brief uffs device operation
  * \author Ricky Zheng, created 10th May, 2005
  */
+#include "uffs_config.h"
 #include "uffs/uffs_device.h"
 #include "uffs/uffs_os.h"
 #include "uffs/uffs_public.h"
 #include "uffs/uffs_mtb.h"
 #include <string.h>
 
-#define PFX "dev: "
+#define PFX "dev : "
 
 
-
-URET uffs_DeviceInitLock(uffs_Device *dev)
+#ifdef CONFIG_USE_PER_DEVICE_LOCK
+void uffs_DeviceInitLock(uffs_Device *dev)
 {
-	dev->lock.sem = uffs_SemCreate(1);
+	uffs_SemCreate(&dev->lock.sem);
 	dev->lock.task_id = UFFS_TASK_ID_NOT_EXIST;
 	dev->lock.counter = 0;
-
-	return U_SUCC;
 }
 
-URET uffs_DeviceReleaseLock(uffs_Device *dev)
+void uffs_DeviceReleaseLock(uffs_Device *dev)
 {
-	if (dev->lock.sem) {
-		uffs_SemDelete(dev->lock.sem);
-		dev->lock.sem = 0;
-	}
-
-	return U_SUCC;
+	uffs_SemDelete(&dev->lock.sem);
 }
 
-URET uffs_DeviceLock(uffs_Device *dev)
+void uffs_DeviceLock(uffs_Device *dev)
 {
-
 	uffs_SemWait(dev->lock.sem);
 	
 	if (dev->lock.counter != 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Lock device, counter %d NOT zero?!", dev->lock.counter);
+		uffs_Perror(UFFS_MSG_NORMAL,
+					"Lock device, counter %d NOT zero?!", dev->lock.counter);
 	}
 
 	dev->lock.counter++;
-
-	return U_SUCC;
 }
 
-URET uffs_DeviceUnLock(uffs_Device *dev)
+void uffs_DeviceUnLock(uffs_Device *dev)
 {
-
 	dev->lock.counter--;
 
 	if (dev->lock.counter != 0) {
-		uffs_Perror(UFFS_ERR_NORMAL, "Unlock device, counter %d NOT zero?!", dev->lock.counter);
+		uffs_Perror(UFFS_MSG_NORMAL,
+					"Unlock device, counter %d NOT zero?!", dev->lock.counter);
 	}
 	
 	uffs_SemSignal(dev->lock.sem);
-
-	return U_SUCC;
 }
 
+#else
+
+/* dummy stubs */
+void uffs_DeviceInitLock(uffs_Device *dev) {}
+void uffs_DeviceReleaseLock(uffs_Device *dev) {}
+void uffs_DeviceLock(uffs_Device *dev) {}
+void uffs_DeviceUnLock(uffs_Device *dev) {}
+
+#endif

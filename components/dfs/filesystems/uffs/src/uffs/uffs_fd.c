@@ -37,67 +37,166 @@
  */
 
 #include <string.h>
-#include "uffs/uffs_config.h"
+#include "uffs_config.h"
 #include "uffs/uffs_fs.h"
 #include "uffs/uffs_fd.h"
-#define PFX "fd: "
+#include "uffs/uffs_utils.h"
+#include "uffs/uffs_version.h"
+#include "uffs/uffs_mtb.h"
+#include "uffs/uffs_public.h"
+#include "uffs/uffs_find.h"
+
+#define PFX "fd  : "
+
+/**
+ * \brief POSIX DIR
+ */
+struct uffs_dirSt {
+    struct uffs_ObjectSt   *obj;		/* dir object */
+    struct uffs_FindInfoSt f;			/* find info */
+    struct uffs_ObjectInfoSt info;		/* object info */
+    struct uffs_dirent dirent;			/* dir entry */
+};
 
 
 #define FD_OFFSET		3	//!< just make file handler more like POSIX (0, 1, 2 for stdin/stdout/stderr)
 
-#define FD2OBJ(fd)	(((fd) >= FD_OFFSET && (fd) < MAX_DIR_HANDLE + FD_OFFSET) ? \
-						(uffs_Object *)uffs_PoolGetBufByIndex(uffs_GetObjectPool(), (fd) - FD_OFFSET) : NULL )
+#define OBJ2FD(obj)	\
+	( \
+		( \
+			uffs_PoolGetIndex(uffs_GetObjectPool(), obj) | \
+			(_fd_signature << FD_SIGNATURE_SHIFT) \
+		) \
+		+ FD_OFFSET \
+	)
 
-#define OBJ2FD(obj)		(uffs_PoolGetIndex(uffs_GetObjectPool(), obj) + FD_OFFSET)
+/**
+ * check #fd signature, convert #fd to #obj
+ * if success, hold global file system lock, otherwise return with #ret
+ */
+#define CHK_OBJ_LOCK(fd, obj, ret)	\
+	do { \
+		uffs_GlobalFsLockLock(); \
+		fd -= FD_OFFSET; \
+		if ( (fd >> FD_SIGNATURE_SHIFT) != _fd_signature ) { \
+			uffs_set_error(-UEBADF); \
+			uffs_Perror(UFFS_MSG_NOISY, "invalid fd: %d (sig: %d, expect: %d)", \
+					fd + FD_OFFSET, fd >> FD_SIGNATURE_SHIFT, _fd_signature); \
+			uffs_GlobalFsLockUnlock(); \
+			return (ret); \
+		} \
+		fd = fd & ((1 << FD_SIGNATURE_SHIFT) - 1); \
+		obj = (uffs_Object *)uffs_PoolGetBufByIndex(uffs_GetObjectPool(), fd); \
+		if ((obj) == NULL || \
+				uffs_PoolVerify(uffs_GetObjectPool(), (obj)) == U_FALSE || \
+				uffs_PoolCheckFreeList(uffs_GetObjectPool(), (obj)) == U_TRUE) { \
+			uffs_set_error(-UEBADF); \
+			uffs_Perror(UFFS_MSG_NOISY, "invalid obj"); \
+			uffs_GlobalFsLockUnlock(); \
+			return (ret); \
+		} \
+	} while(0)
 
-#define CHK_OBJ(obj, ret)	do { \
-								if (uffs_PoolVerify(uffs_GetObjectPool(), (obj)) == U_FALSE || \
-										uffs_PoolCheckFreeList(uffs_GetObjectPool(), (obj)) == U_TRUE) { \
-									uffs_set_error(-UEBADF); \
-									return (ret); \
-								} \
-							} while(0)
+/**
+ * check #dirp signature,
+ * if success, hold global file system lock,
+ * otherwise return with #ret
+ */
+#define CHK_DIR_LOCK(dirp, ret)	\
+	do { \
+		uffs_GlobalFsLockLock(); \
+		if ((dirp) == NULL || \
+				uffs_PoolVerify(&_dir_pool, (dirp)) == U_FALSE || \
+				uffs_PoolCheckFreeList(&_dir_pool, (dirp)) == U_TRUE) { \
+			uffs_set_error(-UEBADF); \
+			uffs_Perror(UFFS_MSG_NOISY, "invalid dirp"); \
+			uffs_GlobalFsLockUnlock(); \
+			return (ret); \
+		} \
+	} while(0)
 
-#define CHK_DIR(dirp, ret)	do { \
-								if (uffs_PoolVerify(&_dir_pool, (dirp)) == U_FALSE || \
-										uffs_PoolCheckFreeList(&_dir_pool, (dirp)) == U_TRUE) { \
-									uffs_set_error(-UEBADF); \
-									return (ret); \
-								} \
-							} while(0)
-
-#define CHK_DIR_VOID(dirp)	do { \
-								if (uffs_PoolVerify(&_dir_pool, (dirp)) == U_FALSE || \
-										uffs_PoolCheckFreeList(&_dir_pool, (dirp)) == U_TRUE) { \
-									uffs_set_error(-UEBADF); \
-									return; \
-								} \
-							} while(0)
-
+/**
+ * check #dirp signature,
+ * if success, hold global file system lock,
+ * otherwise return void
+ */
+#define CHK_DIR_VOID_LOCK(dirp)	\
+	do { \
+		uffs_GlobalFsLockLock(); \
+		if ((dirp) == NULL || \
+				uffs_PoolVerify(&_dir_pool, (dirp)) == U_FALSE || \
+				uffs_PoolCheckFreeList(&_dir_pool, (dirp)) == U_TRUE) { \
+			uffs_set_error(-UEBADF); \
+			uffs_Perror(UFFS_MSG_NOISY, "invalid dirp"); \
+			uffs_GlobalFsLockUnlock(); \
+			return; \
+		} \
+	} while(0)
 
 
 static int _dir_pool_data[sizeof(uffs_DIR) * MAX_DIR_HANDLE / sizeof(int)];
 static uffs_Pool _dir_pool;
 static int _uffs_errno = 0;
 
+
+//
+// What is fd signature ? fd signature is for detecting file system get formated by other party.
+//   A thread open a file, read()...sleep()...write()...sleep()...
+//   B thread format UFFS partition, increase fd signature.
+//   A thread ...sleep()...read() --> Opps, fd signature changed ! read() return error(expected).
+//
+#define MAX_FD_SIGNATURE_ROUND  (100)
+static int _fd_signature = 0;
+
+//
+// only get called when formating UFFS partition
+//
+void uffs_FdSignatureIncrease(void)
+{
+	if (_fd_signature++ > MAX_FD_SIGNATURE_ROUND)
+		_fd_signature = 0;
+}
+
 /**
  * initialise uffs_DIR buffers, called by UFFS internal
  */
-URET uffs_InitDirEntryBuf(void)
+URET uffs_DirEntryBufInit(void)
 {
-	return uffs_PoolInit(&_dir_pool, _dir_pool_data, sizeof(_dir_pool_data),
-			sizeof(uffs_DIR), MAX_DIR_HANDLE);
+	return uffs_PoolInit(&_dir_pool, _dir_pool_data,
+							sizeof(_dir_pool_data),
+							sizeof(uffs_DIR), MAX_DIR_HANDLE);
 }
 
 /**
  * Release uffs_DIR buffers, called by UFFS internal
  */
-URET uffs_ReleaseDirEntryBuf(void)
+URET uffs_DirEntryBufRelease(void)
 {
 	return uffs_PoolRelease(&_dir_pool);
 }
 
-uffs_Pool * uffs_GetDirEntryBufPool(void)
+/**
+ * Put all dir entry buf match dev
+ */
+int uffs_DirEntryBufPutAll(uffs_Device *dev)
+{
+	int count = 0;
+	uffs_DIR *dirp = NULL;
+
+	do {
+		dirp = (uffs_DIR *) uffs_PoolFindNextAllocated(&_dir_pool, dirp);
+		if (dirp && dirp->obj && dirp->obj->dev &&
+				dirp->obj->dev->dev_num == dev->dev_num) {
+			uffs_PoolPut(&_dir_pool, dirp);
+			count++;
+		}
+	} while (dirp);
+
+	return count;
+}
+
+
+uffs_Pool * uffs_DirEntryBufGetPool(void)
 {
 	return &_dir_pool;
 }
@@ -139,6 +238,8 @@ int uffs_open(const char *name, int oflag, ...)
 	uffs_Object *obj;
 	int ret = 0;
 
+	uffs_GlobalFsLockLock();
+
 	obj = uffs_GetObject();
 	if (obj == NULL) {
 		uffs_set_error(-UEMFILE);
@@ -155,15 +256,17 @@ int uffs_open(const char *name, int oflag, ...)
 		}
 	}
 
+	uffs_GlobalFsLockUnlock();
+
 	return ret;
 }
 
 int uffs_close(int fd)
 {
 	int ret = 0;
-	uffs_Object *obj = FD2OBJ(fd);
+	uffs_Object *obj;
 
-	CHK_OBJ(obj, -1);
+	CHK_OBJ_LOCK(fd, obj, -1);
 
 	uffs_ClearObjectErr(obj);
 	if (uffs_CloseObject(obj) == U_FAIL) {
@@ -175,31 +278,37 @@ int uffs_close(int fd)
 		ret = 0;
 	}
 
+	uffs_GlobalFsLockUnlock();
+
 	return ret;
 }
 
 int uffs_read(int fd, void *data, int len)
 {
 	int ret;
-	uffs_Object *obj = FD2OBJ(fd);
+	uffs_Object *obj;
 
-	CHK_OBJ(obj, -1);
+	CHK_OBJ_LOCK(fd, obj, -1);
 	uffs_ClearObjectErr(obj);
 	ret = uffs_ReadObject(obj, data, len);
 	uffs_set_error(-uffs_GetObjectErr(obj));
 
+	uffs_GlobalFsLockUnlock();
+
 	return ret;
 }
 
-int uffs_write(int fd, void *data, int len)
+int uffs_write(int fd, const void *data, int len)
 {
 	int ret;
-	uffs_Object *obj = FD2OBJ(fd);
+	uffs_Object *obj;
 
-	CHK_OBJ(obj, -1);
+	CHK_OBJ_LOCK(fd, obj, -1);
 	uffs_ClearObjectErr(obj);
 	ret = uffs_WriteObject(obj, data, len);
 	uffs_set_error(-uffs_GetObjectErr(obj));
+
+	uffs_GlobalFsLockUnlock();
 
 	return ret;
 }
@@ -207,52 +316,60 @@ int uffs_write(int fd, void *data, int len)
 long uffs_seek(int fd, long offset, int origin)
 {
 	int ret;
-	uffs_Object *obj = FD2OBJ(fd);
+	uffs_Object *obj;
 
-	CHK_OBJ(obj, -1);
+	CHK_OBJ_LOCK(fd, obj, -1);
 	uffs_ClearObjectErr(obj);
 	ret = uffs_SeekObject(obj, offset, origin);
 	uffs_set_error(-uffs_GetObjectErr(obj));
 	
+	uffs_GlobalFsLockUnlock();
+
 	return ret;
 }
 
 long uffs_tell(int fd)
 {
 	long ret;
-	uffs_Object *obj = FD2OBJ(fd);
+	uffs_Object *obj;
 
-	CHK_OBJ(obj, -1);
+	CHK_OBJ_LOCK(fd, obj, -1);
 	uffs_ClearObjectErr(obj);
 	ret = (long) uffs_GetCurOffset(obj);
 	uffs_set_error(-uffs_GetObjectErr(obj));
 	
+	uffs_GlobalFsLockUnlock();
+
 	return ret;
 }
 
 int uffs_eof(int fd)
 {
 	int ret;
-	uffs_Object *obj = FD2OBJ(fd);
+	uffs_Object *obj;
 
-	CHK_OBJ(obj, -1);
+	CHK_OBJ_LOCK(fd, obj, -1);
 	uffs_ClearObjectErr(obj);
 	ret = uffs_EndOfFile(obj);
 	uffs_set_error(-uffs_GetObjectErr(obj));
 	
+	uffs_GlobalFsLockUnlock();
+
 	return ret;
 }
 
 int uffs_flush(int fd)
 {
 	int ret;
-	uffs_Object *obj = FD2OBJ(fd);
+	uffs_Object *obj;
 
-	CHK_OBJ(obj, -1);
+	CHK_OBJ_LOCK(fd, obj, -1);
 	uffs_ClearObjectErr(obj);
 	ret = (uffs_FlushObject(obj) == U_SUCC) ? 0 : -1;
 	uffs_set_error(-uffs_GetObjectErr(obj));
 	
+	uffs_GlobalFsLockUnlock();
+
 	return ret;
 }
 
@@ -261,8 +378,10 @@ int uffs_rename(const char *old_name, const char *new_name)
 	int err = 0;
 	int ret = 0;
 
+	uffs_GlobalFsLockLock();
 	ret = (uffs_RenameObject(old_name, new_name, &err) == U_SUCC) ? 0 : -1;
 	uffs_set_error(-err);
+	uffs_GlobalFsLockUnlock();
 
 	return ret;
 }
@@ -281,26 +400,31 @@ int uffs_remove(const char *name)
 		err = UEISDIR;
 		ret = -1;
 	}
-	else if (uffs_DeleteObject(name, &err) == U_SUCC) {
-		ret = 0;
-	}
 	else {
-		ret = -1;
+		uffs_GlobalFsLockLock();
+		if (uffs_DeleteObject(name, &err) == U_SUCC) {
+			ret = 0;
+		}
+		else {
+			ret = -1;
+		}
+		uffs_GlobalFsLockUnlock();
 	}
 
 	uffs_set_error(-err);
 	return ret;
 }
 
-int uffs_truncate(int fd, long remain)
+int uffs_ftruncate(int fd, long remain)
 {
 	int ret;
-	uffs_Object *obj = FD2OBJ(fd);
+	uffs_Object *obj;
 
-	CHK_OBJ(obj, -1);
+	CHK_OBJ_LOCK(fd, obj, -1);
 	uffs_ClearObjectErr(obj);
 	ret = (uffs_TruncateObject(obj, remain) == U_SUCC) ? 0 : -1;
 	uffs_set_error(-uffs_GetObjectErr(obj));
+	uffs_GlobalFsLockUnlock();
 	
 	return ret;
 }
@@ -343,6 +467,8 @@ int uffs_stat(const char *name, struct uffs_stat *buf)
 	int err = 0;
 	URET result;
 
+	uffs_GlobalFsLockLock();
+
 	obj = uffs_GetObject();
 	if (obj) {
 		if (*name && name[strlen(name) - 1] == '/') {
@@ -368,6 +494,8 @@ int uffs_stat(const char *name, struct uffs_stat *buf)
 	}
 
 	uffs_set_error(-err);
+	uffs_GlobalFsLockUnlock();
+
 	return ret;
 }
 
@@ -378,16 +506,20 @@ int uffs_lstat(const char *name, struct uffs_stat *buf)
 
 int uffs_fstat(int fd, struct uffs_stat *buf)
 {
-	uffs_Object *obj = FD2OBJ(fd);
+	int ret;
+	uffs_Object *obj;
 
-	CHK_OBJ(obj, -1);
+	CHK_OBJ_LOCK(fd, obj, -1);
 
-	return do_stat(obj, buf);
+	ret = do_stat(obj, buf);
+	uffs_GlobalFsLockUnlock();
+
+	return ret;
 }
 
 int uffs_closedir(uffs_DIR *dirp)
 {
-	CHK_DIR(dirp, -1);
+	CHK_DIR_LOCK(dirp, -1);
 
 	uffs_FindObjectClose(&dirp->f);
 	if (dirp->obj) {
@@ -395,6 +527,7 @@ int uffs_closedir(uffs_DIR *dirp)
 		uffs_PutObject(dirp->obj);
 	}
 	PutDirEntry(dirp);
+	uffs_GlobalFsLockUnlock();
 
 	return 0;
 }
@@ -403,7 +536,11 @@ uffs_DIR * uffs_opendir(const char *path)
 {
 	int err = 0;
 	uffs_DIR *ret = NULL;
-	uffs_DIR *dirp = GetDirEntry();
+	uffs_DIR *dirp;
+
+	uffs_GlobalFsLockLock();
+
+	dirp = GetDirEntry();
 
 	if (dirp) {
 		dirp->obj = uffs_GetObject();
@@ -433,36 +570,39 @@ uffs_DIR * uffs_opendir(const char *path)
 	}
 ext:
 	uffs_set_error(-err);
+	uffs_GlobalFsLockUnlock();
+
 	return ret;
 }
 
 struct uffs_dirent * uffs_readdir(uffs_DIR *dirp)
 {
-	struct uffs_dirent *ent;
+	struct uffs_dirent *ent = NULL;
 
-	CHK_DIR(dirp, NULL);
+	CHK_DIR_LOCK(dirp, NULL);
 
 	if (uffs_FindObjectNext(&dirp->info, &dirp->f) == U_SUCC) {
 		ent = &dirp->dirent;
 		ent->d_ino = dirp->info.serial;
-		ent->d_namelen = dirp->info.info.name_len;
+		ent->d_namelen = dirp->info.info.name_len < (sizeof(ent->d_name) - 1) ? dirp->info.info.name_len : (sizeof(ent->d_name) - 1);
 		memcpy(ent->d_name, dirp->info.info.name, ent->d_namelen);
-		ent->d_name[ent->d_namelen] = 0;
+		ent->d_name[ent->d_namelen] = '\0';
 		ent->d_off = dirp->f.pos;
 		ent->d_reclen = sizeof(struct uffs_dirent);
 		ent->d_type = dirp->info.info.attr;
-
-		return ent;
 	}
-	else
-		return NULL;
+	uffs_GlobalFsLockUnlock();
+
+	return ent;
 }
 
 void uffs_rewinddir(uffs_DIR *dirp)
 {
-	CHK_DIR_VOID(dirp);
+	CHK_DIR_VOID_LOCK(dirp);
 
 	uffs_FindObjectRewind(&dirp->f);
+
+	uffs_GlobalFsLockUnlock();
 }
 
 
@@ -471,6 +611,8 @@ int uffs_mkdir(const char *name, ...)
 	uffs_Object *obj;
 	int ret = 0;
 	int err = 0;
+
+	uffs_GlobalFsLockLock();
 
 	obj = uffs_GetObject();
 	if (obj) {
@@ -490,6 +632,8 @@ int uffs_mkdir(const char *name, ...)
 	}
 
 	uffs_set_error(-err);
+	uffs_GlobalFsLockUnlock();
+
 	return ret;
 }
 
@@ -507,26 +651,96 @@ int uffs_rmdir(const char *name)
 		err = UENOTDIR;
 		ret = -1;
 	}
-	else if (uffs_DeleteObject(name, &err) == U_SUCC) {
-		ret = 0;
-	}
 	else {
-		ret = -1;
+		uffs_GlobalFsLockLock();
+		if (uffs_DeleteObject(name, &err) == U_SUCC) {
+			ret = 0;
+		}
+		else {
+			ret = -1;
+		}
+		uffs_GlobalFsLockUnlock();
 	}
-
 	uffs_set_error(-err);
 	return ret;
 }
 
-
-#if 0
-void uffs_seekdir(uffs_DIR *dirp, long loc)
+int uffs_version(void)
 {
-	return ;
+	return uffs_GetVersion();
 }
 
-long uffs_telldir(uffs_DIR *dirp)
+int uffs_format(const char *mount_point)
 {
-	return 0;
+	uffs_Device *dev = NULL;
+	URET ret = U_FAIL;
+
+	dev = uffs_GetDeviceFromMountPoint(mount_point);
+	if (dev) {
+		uffs_GlobalFsLockLock();
+		ret = uffs_FormatDevice(dev, U_TRUE);
+		uffs_GlobalFsLockUnlock();
+	}
+
+	return ret == U_SUCC ? 0 : -1;
 }
-#endif
+
+long uffs_space_total(const char *mount_point)
+{
+	uffs_Device *dev = NULL;
+	long ret = -1L;
+
+	dev = uffs_GetDeviceFromMountPoint(mount_point);
+	if (dev) {
+		uffs_GlobalFsLockLock();
+		ret = (long) uffs_GetDeviceTotal(dev);
+		uffs_GlobalFsLockUnlock();
+	}
+
+	return ret;
+}
+
+long uffs_space_used(const char *mount_point)
+{
+	uffs_Device *dev = NULL;
+	long ret = -1L;
+
+	dev = uffs_GetDeviceFromMountPoint(mount_point);
+	if (dev) {
+		uffs_GlobalFsLockLock();
+		ret = (long) uffs_GetDeviceUsed(dev);
+		uffs_GlobalFsLockUnlock();
+	}
+
+	return ret;
+}
+
+long uffs_space_free(const char *mount_point)
+{
+	uffs_Device *dev = NULL;
+	long ret = -1L;
+
+	dev = uffs_GetDeviceFromMountPoint(mount_point);
+	if (dev) {
+		uffs_GlobalFsLockLock();
+		ret = (long) uffs_GetDeviceFree(dev);
+		uffs_GlobalFsLockUnlock();
+	}
+
+	return ret;
+}
+
+
+void uffs_flush_all(const char *mount_point)
+{
+	uffs_Device *dev = NULL;
+
+	dev = uffs_GetDeviceFromMountPoint(mount_point);
+	if (dev) {
+		uffs_GlobalFsLockLock();
+		uffs_BufFlushAll(dev);
+		uffs_PutDevice(dev);
+		uffs_GlobalFsLockUnlock();
+	}
+}
+

@@ -44,14 +44,14 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include "uffs_config.h"
 #include "uffs/uffs_device.h"
 #include "uffs_fileem.h"
 #include "uffs/uffs_ecc.h"
 
 #define PFX "femu: "
-#define MSG(msg,...) uffs_PerrorRaw(UFFS_ERR_NORMAL, msg, ## __VA_ARGS__)
-#define MSGLN(msg,...) uffs_Perror(UFFS_ERR_NORMAL, msg, ## __VA_ARGS__)
+#define MSG(msg,...) uffs_PerrorRaw(UFFS_MSG_NORMAL, msg, ## __VA_ARGS__)
+#define MSGLN(msg,...) uffs_Perror(UFFS_MSG_NORMAL, msg, ## __VA_ARGS__)
 
 static int femu_hw_WritePageWithLayout(uffs_Device *dev, u32 block, u32 page,
 							const u8 *data, int data_len, const u8 *ecc, const uffs_TagStore *ts)
@@ -107,7 +107,9 @@ static int femu_hw_WritePageWithLayout(uffs_Device *dev, u32 block, u32 page,
 			goto err;
 		}
 
-		uffs_Assert(data != NULL, "BUG: Write spare without data ?");
+		if (!uffs_Assert(data != NULL, "BUG: Write spare without data ?"))
+			goto err;
+
 		uffs_EccMake(data, data_len, ecc_buf);
 		uffs_FlashMakeSpare(dev, ts, ecc_buf, spare);
 		spare_len = dev->mem.spare_data_size;

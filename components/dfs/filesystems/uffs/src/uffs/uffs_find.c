@@ -38,6 +38,7 @@
 
 #include <string.h> 
 #include <stdio.h>
+#include "uffs_config.h"
 #include "uffs/uffs_find.h"
 
 #define TPOOL(dev) &((dev)->mem.tree_pool)
@@ -50,11 +51,15 @@ static void ResetFindInfo(uffs_FindInfo *f)
 	f->pos = 0;
 }
 
-static URET _LoadObjectInfo(uffs_Device *dev, TreeNode *node, uffs_ObjectInfo *info, int type, int *err)
+static URET _LoadObjectInfo(uffs_Device *dev,
+							TreeNode *node,
+							uffs_ObjectInfo *info,
+							int type,
+							int *err)
 {
 	uffs_Buf *buf;
 
-	buf = uffs_BufGetEx(dev, (u8)type, node, 0);
+	buf = uffs_BufGetEx(dev, (u8)type, node, 0, 0);
 
 	if (buf == NULL) {
 		if (err)
@@ -97,7 +102,17 @@ URET uffs_GetObjectInfo(uffs_Object *obj, uffs_ObjectInfo *info, int *err)
 	uffs_DeviceLock(dev);
 
 	if (obj && dev && info) {
-		ret = _LoadObjectInfo(dev, obj->node, info, obj->type, err);
+		if (obj->parent == PARENT_OF_ROOT) {
+			// this is ROOT. UFFS does not physically has root, just fake it ...
+			memset(info, 0, sizeof(uffs_ObjectInfo));
+			info->serial = obj->serial;
+			info->info.attr |= (FILE_ATTR_DIR | FILE_ATTR_WRITE);
+			if (err)
+				*err = UENOERR;
+			ret = U_SUCC;
+		}
+		else
+			ret = _LoadObjectInfo(dev, obj->node, info, obj->type, err);
 	}
 	else {
 		if (err)
@@ -121,7 +136,8 @@ URET uffs_GetObjectInfo(uffs_Object *obj, uffs_ObjectInfo *info, int *err)
  */
 URET uffs_FindObjectOpen(uffs_FindInfo *f, uffs_Object *dir)
 {
-	if (f == NULL || dir == NULL || dir->dev == NULL || dir->open_succ != U_TRUE)
+	if (f == NULL || dir == NULL ||
+			dir->dev == NULL || dir->open_succ != U_TRUE)
 		return U_FAIL;
 
 	f->dev = dir->dev;
@@ -167,13 +183,10 @@ static URET do_FindObject(uffs_FindInfo *f, uffs_ObjectInfo *info, u16 x)
 	TreeNode *node;
 	uffs_Device *dev = f->dev;
 
-	if (f->step == 0) 
-	{ //!< working on dirs
-		while (x != EMPTY_NODE) 
-		{
+	if (f->step == 0) { //!< working on dirs
+		while (x != EMPTY_NODE) {
 			node = FROM_IDX(x, TPOOL(dev));
-			if (node->u.dir.parent == f->serial) 
-			{
+			if (node->u.dir.parent == f->serial) {
 				f->work = node;
 				f->pos++;
 				if (info)
@@ -185,14 +198,11 @@ static URET do_FindObject(uffs_FindInfo *f, uffs_ObjectInfo *info, u16 x)
 
 		f->hash++; //come to next hash entry
 
-		for (; f->hash < DIR_NODE_ENTRY_LEN; f->hash++) 
-		{
+		for (; f->hash < DIR_NODE_ENTRY_LEN; f->hash++) {
 			x = dev->tree.dir_entry[f->hash];
-			while (x != EMPTY_NODE) 
-			{
+			while (x != EMPTY_NODE) {
 				node = FROM_IDX(x, TPOOL(dev));
-				if (node->u.dir.parent == f->serial) 
-				{
+				if (node->u.dir.parent == f->serial) {
 					f->work = node;
 					f->pos++;
 					if (info)
@@ -206,17 +216,14 @@ static URET do_FindObject(uffs_FindInfo *f, uffs_ObjectInfo *info, u16 x)
 		//no subdirs, then lookup files ..
 		f->step++;
 		f->hash = 0;
-		x = EMPTY_NODE;
+		x = dev->tree.file_entry[f->hash];
 	}
 
-	if (f->step == 1) 
-	{
+	if (f->step == 1) {
 
-		while (x != EMPTY_NODE) 
-		{
+		while (x != EMPTY_NODE) {
 			node = FROM_IDX(x, TPOOL(dev));
-			if (node->u.file.parent == f->serial) 
-			{
+			if (node->u.file.parent == f->serial) {
 				f->work = node;
 				f->pos++;
 				if (info)
@@ -228,14 +235,11 @@ static URET do_FindObject(uffs_FindInfo *f, uffs_ObjectInfo *info, u16 x)
 
 		f->hash++; //come to next hash entry
 
-		for (; f->hash < FILE_NODE_ENTRY_LEN; f->hash++) 
-		{
+		for (; f->hash < FILE_NODE_ENTRY_LEN; f->hash++) {
 			x = dev->tree.file_entry[f->hash];
-			while (x != EMPTY_NODE) 
-			{
+			while (x != EMPTY_NODE) {
 				node = FROM_IDX(x, TPOOL(dev));
-				if (node->u.file.parent == f->serial) 
-				{
+				if (node->u.file.parent == f->serial) {
 					f->work = node;
 					f->pos++;
 					if (info) 
@@ -296,7 +300,7 @@ URET uffs_FindObjectNext(uffs_ObjectInfo *info, uffs_FindInfo * f)
 	uffs_Device *dev = f->dev;
 	URET ret = U_SUCC;
 
-	if (f->dev == NULL || f->step > 1) 
+	if (dev == NULL || f->step > 1) 
 		return U_FAIL;
 
 	if (f->work == NULL)
@@ -312,7 +316,8 @@ URET uffs_FindObjectNext(uffs_ObjectInfo *info, uffs_FindInfo * f)
 /**
  * Rewind a find object process.
  *
- * \note After rewind, you can call uffs_FindObjectFirst() to start find object process.
+ * \note After rewind, you can call uffs_FindObjectFirst() to
+ *			start find object process.
  */
 URET uffs_FindObjectRewind(uffs_FindInfo *f)
 {
@@ -348,7 +353,8 @@ URET uffs_FindObjectClose(uffs_FindInfo * f)
  * \param[in] f uffs_FindInfo structure, openned by uffs_FindObjectOpen().
  *
  * \return object counts
- * \note after call this function, you need to call uffs_FindObjectRewind() to start finding process.
+ * \note after call this function, you need to call
+ *		 uffs_FindObjectRewind() to start finding process.
  */
 int uffs_FindObjectCount(uffs_FindInfo *f)
 {

@@ -55,13 +55,14 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include "uffs_config.h"
 #include "uffs/uffs_device.h"
+#include "uffs/uffs_ecc.h"
 #include "uffs_fileem.h"
 
 #define PFX "femu: "
-#define MSG(msg,...) uffs_PerrorRaw(UFFS_ERR_NORMAL, msg, ## __VA_ARGS__)
-#define MSGLN(msg,...) uffs_Perror(UFFS_ERR_NORMAL, msg, ## __VA_ARGS__)
+#define MSG(msg,...) uffs_PerrorRaw(UFFS_MSG_NORMAL, msg, ## __VA_ARGS__)
+#define MSGLN(msg,...) uffs_Perror(UFFS_MSG_NORMAL, msg, ## __VA_ARGS__)
 
 #define RS_ECC_SIZE			10
 #define PAGE_DATA_SIZE		508
@@ -78,7 +79,9 @@ static void start_sdata_access()
 
 static void feed_sdata(const u8 *data, int len)
 {
-	uffs_Assert(g_sdata_buf_pointer + len <= sizeof(g_sdata_buf), "BUG: Serial Data Buffer overflow !!");
+	if (!uffs_Assert(g_sdata_buf_pointer + len <= sizeof(g_sdata_buf), "BUG: Serial Data Buffer overflow !!"))
+		return;
+
 	if (data)
 		memcpy(g_sdata_buf + g_sdata_buf_pointer, data, len);
 	g_sdata_buf_pointer += len;
@@ -86,14 +89,18 @@ static void feed_sdata(const u8 *data, int len)
 
 static void feed_sdata_constant(u8 val, int num)
 {
-	uffs_Assert(g_sdata_buf_pointer + num <= sizeof(g_sdata_buf), "BUG: Serial Data Buffer overflow !!");
+	if (!uffs_Assert(g_sdata_buf_pointer + num <= sizeof(g_sdata_buf), "BUG: Serial Data Buffer overflow !!"))
+		return;
+
 	memset(g_sdata_buf + g_sdata_buf_pointer, val, num);
 	g_sdata_buf_pointer += num;
 }
 
 static void drain_sdata(u8 *data, int len)
 {
-	uffs_Assert(sizeof(g_sdata_buf) - g_sdata_buf_pointer >= len, "BUG: Serial Data Buffer overdrain !!");
+	if (!uffs_Assert( (int)sizeof(g_sdata_buf) - g_sdata_buf_pointer >= len, "BUG: Serial Data Buffer overdrain !!"))
+		return;
+
 	if (data)
 		memcpy(data, g_sdata_buf + g_sdata_buf_pointer, len);
 	g_sdata_buf_pointer += len;
@@ -142,7 +149,7 @@ static int program_sdata(uffs_Device *dev, int block, int page)
 	int abs_page;
 	struct uffs_StorageAttrSt *attr = dev->attr;
 	u8 ecc_buf[RS_ECC_SIZE];
-	int writtern;
+	int writtern = 0;
 
 	// In the real world, MLC controller will generate RS-ECC code in serial data buffer
 	// and might start auto programing NAND flash. Here, we use software ECC to emulate RS-ECC.
@@ -150,13 +157,14 @@ static int program_sdata(uffs_Device *dev, int block, int page)
 	uffs_EccMake(g_sdata_buf, attr->page_data_size, ecc_buf);
 	feed_sdata(ecc_buf, RS_ECC_SIZE);
 
-	uffs_Assert(g_sdata_buf_pointer == PAGE_FULL_SIZE, "Serial Data Buffer is not fully filled !!");
+	if (!uffs_Assert(g_sdata_buf_pointer == PAGE_FULL_SIZE, "Serial Data Buffer is not fully filled !!"))
+		goto ext;
 
 	abs_page = attr->pages_per_block * block + page;
 
 	fseek(emu->fp, abs_page * PAGE_FULL_SIZE, SEEK_SET);
 	writtern = fwrite(g_sdata_buf, 1, PAGE_FULL_SIZE, emu->fp);
-
+ext:
 	return (writtern == PAGE_FULL_SIZE) ? UFFS_FLASH_NO_ERR : UFFS_FLASH_IO_ERR;
 }
 
@@ -281,9 +289,7 @@ static URET femu_hw_auto_ReadPageWithLayout(uffs_Device *dev, u32 block, u32 pag
 	int abs_page;
 	struct uffs_StorageAttrSt *attr = dev->attr;
 	unsigned char status;
-	int spare_len;
 	u8 spare[PAGE_SPARE_SIZE];
-	u8 ecc_buf[RS_ECC_SIZE];
 	int ret = UFFS_FLASH_IO_ERR;
 
 	emu = (uffs_FileEmu *)(dev->attr->_private);

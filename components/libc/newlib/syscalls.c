@@ -82,7 +82,7 @@ _link_r(struct _reent *ptr, const char *old, const char *new)
 _off_t
 _lseek_r(struct _reent *ptr, int fd, _off_t pos, int whence)
 {
-#ifndef RT_USING_DfS
+#ifndef RT_USING_DFS
 	return 0;
 #else
 	_off_t rc;
@@ -193,27 +193,36 @@ _wait_r(struct _reent *ptr, int *status)
 	return -1;
 }
 
+#ifdef RT_USING_DEVICE
 _ssize_t
 _write_r(struct _reent *ptr, int fd, const void *buf, size_t nbytes)
 {
-#ifndef RT_USING_DFS
 	if (fd < 3)
 	{
+#ifdef RT_USING_CONSOLE
 		rt_device_t console_device;
 		extern rt_device_t rt_console_get_device(void);
 
 		console_device = rt_console_get_device();
 		if (console_device != 0) rt_device_write(console_device, 0, buf, nbytes);
 		return nbytes;
-	}
-	return 0;
 #else
-	_ssize_t rc;
-
-	rc = write(fd, buf, nbytes);
-	return rc;
+        return 0;
 #endif
+	}
+	else
+	{
+#ifdef RT_USING_DFS
+	    _ssize_t rc;
+
+	    rc = write(fd, buf, nbytes);
+	    return rc;
+#else
+        return 0;
+#endif
+	}
 }
+#endif
 
 #ifndef RT_USING_PTHREADS
 
@@ -235,26 +244,28 @@ _write_r(struct _reent *ptr, int fd, const void *buf, size_t nbytes)
 
 
 struct timeval _timevalue = {0};
-static void libc_system_time_init()
+#ifdef RT_USING_DEVICE
+static void libc_system_time_init(void)
 {
-    time_t time;
-    rt_tick_t tick;
-    rt_device_t device;
+	time_t time;
+	rt_tick_t tick;
+	rt_device_t device;
 
-    time = 0;
-    device = rt_device_find("rtc");
-    if (device != RT_NULL)
-    {
+	time = 0;
+	device = rt_device_find("rtc");
+	if (device != RT_NULL)
+	{
 		/* get realtime seconds */
-        rt_device_control(device, RT_DEVICE_CTRL_RTC_GET_TIME, &time);
-    }
+		rt_device_control(device, RT_DEVICE_CTRL_RTC_GET_TIME, &time);
+	}
 
 	/* get tick */
-    tick = rt_tick_get();
+	tick = rt_tick_get();
 
-    _timevalue.tv_usec = MICROSECOND_PER_SECOND - (tick%RT_TICK_PER_SECOND) * MICROSECOND_PER_TICK;
-    _timevalue.tv_sec = time - tick/RT_TICK_PER_SECOND - 1;
+	_timevalue.tv_usec = MICROSECOND_PER_SECOND - (tick%RT_TICK_PER_SECOND) * MICROSECOND_PER_TICK;
+	_timevalue.tv_sec = time - tick/RT_TICK_PER_SECOND - 1;
 }
+#endif
 
 int libc_get_time(struct timespec *time)
 {
@@ -375,6 +386,51 @@ _free_r (struct _reent *ptr, void *addr)
 void
 _exit (int status)
 {
+#ifdef RT_USING_MODULE
+	rt_module_t module;
+
+	module = rt_module_self();
+	if (module != RT_NULL)
+	{
+		struct rt_list_node *list;
+		struct rt_object *object;
+
+		rt_enter_critical();
+		
+        /* delete all threads in the module */
+        list = &module->module_object[RT_Object_Class_Thread].object_list;
+        while (list->next != list)
+        {
+            object = rt_list_entry(list->next, struct rt_object, list);
+            if (rt_object_is_systemobject(object) == RT_TRUE)
+            {
+                /* detach static object */
+                rt_thread_detach((rt_thread_t)object);
+            }
+            else
+            {
+                /* delete dynamic object */
+                rt_thread_delete((rt_thread_t)object);
+            }
+        }
+		/* delete main thread */
+		rt_thread_delete(module->module_thread);
+		rt_exit_critical();
+
+		/* re-schedule */
+		rt_schedule();
+	}
+#endif
+	
 	rt_kprintf("thread:%s exit with %d\n", rt_thread_self()->name, status);
-    RT_ASSERT(0);
+	RT_ASSERT(0);
+
+	while (1);
+}
+
+void 
+_system(const char *s)
+{
+    /* not support this call */
+    return;
 }
